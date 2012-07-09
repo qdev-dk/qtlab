@@ -1,6 +1,5 @@
-# Agilent_N1913A.py class, to perform the communication between the Wrapper and the device
-# Pieter de Groot <pieterdegroot@gmail.com>, 2008
-# Martijn Schaafsma <qtlab@mcschaafsma.nl>, 2008
+# Agilent_N1913A.py class, for commucation with an Agilent N1913A RF power sensor
+# Joonas Govenius <joonas.govenius@aalto.fi>, 2012
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,7 +23,7 @@ import numpy
 
 class Agilent_N1913A(Instrument):
     '''
-    This is the driver for the Agilent N1913A Signal Genarator
+    This is the driver for the Agilent N1913A RF power sensor
 
     Usage:
     Initialize with
