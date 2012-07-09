@@ -34,12 +34,12 @@ class TCPInstrument():
     """
 
     def __init__(self, address, tcp_inactive_period = 1.):
-    '''
-        Address must be given as <IPv4-address>:<TCP-port> in base 10 notation, e.g. "10.0.0.1:2550".
-        
-        tcp_inactive_period determines how long the connection is allowed to remain inactive
-        before being closed. Set to < 0 in order to close the connection after each transaction.
-    '''
+        '''
+            Address must be given as <IPv4-address>:<TCP-port> in base 10 notation, e.g. "10.0.0.1:2550".
+            
+            tcp_inactive_period determines how long the connection is allowed to remain inactive
+            before being closed. Set to < 0 in order to close the connection after each transaction.
+        '''
         self.__tcp_lock = threading.Semaphore()
         self.__tcp_close_thread = None
         self.__tcp_connected = False
@@ -64,7 +64,7 @@ class TCPInstrument():
             while '\n' not in reply:
                 reply = reply + self._socket.recv(512)
 
-                logging.debug(__name__ + ' : instrument says: ' + reply + ' in reply to: ' + querystr)
+                logging.debug(__name__ + ' : ' + self._address + ' says ' + reply.replace("\n", " ").replace("\r", " ") + ' in response to ' + querystr.replace("\n", " ").replace("\r", " "))
 
         except Exception:
             self.__tcp_lock.release()
@@ -93,7 +93,7 @@ class TCPInstrument():
 
         try:
             self.__connect()
-            logging.debug(__name__ + ' : telling instrument to: ' + cmd)
+            logging.debug(__name__ + ' : telling ' + self._address + ' to ' + cmd)
             self._socket.sendall(cmd)
         except Exception:
             self.__tcp_lock.release()
@@ -134,14 +134,14 @@ class TCPInstrument():
                 self._socket.settimeout(1.) # timeout in seconds
                 self._socket.recv(512)
             except Exception:
-                logging.debug(__name__ + ' : failed to gracefully shutdown TCP socket.')
+                logging.debug(__name__ + ' : failed to gracefully shutdown TCP socket to ' + self._address)
             #time.sleep(0.5)
             self._socket.close()
             self.__tcp_connected = False
 
     def __connect(self):
         if not (self.__tcp_connected):
-            logging.debug(__name__ + ' : opening TCP socket')
+            logging.debug(__name__ + ' : opening TCP socket to ' + self._address)
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             
             # this should cause RST to be sent when socket.close() is called
