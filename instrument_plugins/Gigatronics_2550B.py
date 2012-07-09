@@ -45,10 +45,6 @@ class Gigatronics_2550B(Instrument):
         logging.info(__name__ + ' : Initializing instrument Gigatronics_2550B')
         Instrument.__init__(self, name, tags=['physical'])
         
-        
-        self.__cached_freq = -1.
-        self.__cached_freq_timestamp = 0.
-        
         self._visainstrument = tcpinstrument.TCPInstrument(address)
 
         self.add_parameter('power',
@@ -56,7 +52,7 @@ class Gigatronics_2550B(Instrument):
         self.add_parameter('phase',
             flags=Instrument.FLAG_GETSET, units='rad', minval=-numpy.pi, maxval=numpy.pi, type=types.FloatType)
         self.add_parameter('frequency',
-            flags=Instrument.FLAG_GETSET, units='Hz', minval=1e5, maxval=50e9, type=types.FloatType)
+            flags=Instrument.FLAG_GETSET, units='Hz', minval=1e5, maxval=50e9, type=types.FloatType, cache_time=1.)
         self.add_parameter('alc_source',
             flags=Instrument.FLAG_GETSET, type=types.StringType)
         self.add_parameter('trigger_source',
@@ -420,15 +416,8 @@ class Gigatronics_2550B(Instrument):
         Output:
             freq (float) : Frequency in Hz
         '''
-        t = time.time()
-        if t - self.__cached_freq_timestamp < 1. :  # return cached freq if it's < 1 second old
-            logging.debug(__name__ + ' : returning cached frequency ' + str(self.__cached_freq))
-            return self.__cached_freq
-
         logging.debug(__name__ + ' : get frequency')
         f = float(self._visainstrument.ask('FREQ:CW?'))
-        self.__cached_freq = f
-        self.__cached_freq_timestamp = t
         return f
 
     def do_set_frequency(self, freq):
@@ -446,9 +435,6 @@ class Gigatronics_2550B(Instrument):
         
         logging.debug(__name__ + ' : set frequency to %f' % freq)
         self._visainstrument.write('FREQ:CW %s' % freq)
-
-        self.__cached_freq = freq
-        self.__cached_freq_timestamp = time.time()
 
         #if freq <= 2e9: time.sleep(.5) # sleep 500ms so that power stabilizes
 
