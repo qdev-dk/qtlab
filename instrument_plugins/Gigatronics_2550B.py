@@ -55,11 +55,10 @@ class Gigatronics_2550B(Instrument):
         self.__cached_freq_timestamp = 0.
         
         self.__tcp_lock = threading.Semaphore()
+        self.__tcp_close_thread = None
         self.__tcp_connected = False
         self.__tcp_last_used = 0.
-        self.__tcp_close_thread = threading.Thread(target=self.__close_inactive_connection, name="gigatronics_auto_close") 
-        self.__tcp_close_thread.daemon = True  # a daemon thread doesn't prevent program from exiting
-        self.__tcp_close_thread.start()
+        self.__TCP_INACTIVE_PERIOD = 1. # period in seconds after which TCP connection is considered inactive
         
         self._address = address
         self._tcpdst = re.match(r"^(\d+\.\d+\.\d+\.\d+):(\d+)", address).groups() # parse into IP & port
@@ -77,6 +76,24 @@ class Gigatronics_2550B(Instrument):
             flags=Instrument.FLAG_GETSET, units='rad', minval=-numpy.pi, maxval=numpy.pi, type=types.FloatType)
         self.add_parameter('frequency',
             flags=Instrument.FLAG_GETSET, units='Hz', minval=1e5, maxval=50e9, type=types.FloatType)
+        self.add_parameter('alc_source',
+            flags=Instrument.FLAG_GETSET, type=types.StringType)
+        self.add_parameter('trigger_source',
+            flags=Instrument.FLAG_GETSET, type=types.StringType)
+        self.add_parameter('pulse_modulation',
+            flags=Instrument.FLAG_GETSET, type=types.BooleanType)
+        self.add_parameter('pulse_modulation_source',
+            flags=Instrument.FLAG_GETSET, type=types.StringType)
+        self.add_parameter('pulse_modulation_inverted_polarity',
+            flags=Instrument.FLAG_GETSET, type=types.BooleanType)
+        self.add_parameter('power_correction_offset',
+            flags=Instrument.FLAG_GETSET, units='dB', minval=-100., maxval=100., type=types.FloatType)
+        self.add_parameter('power_correction_slope',
+            flags=Instrument.FLAG_GETSET, units='dB/GHz', minval=0., maxval=0.5, type=types.FloatType)
+        self.add_parameter('reference_clock_source',
+            flags=Instrument.FLAG_GET, type=types.StringType)
+        self.add_parameter('mode',
+            flags=Instrument.FLAG_GET, type=types.StringType)
         self.add_parameter('status',
             flags=Instrument.FLAG_GETSET, type=types.StringType)
 
@@ -99,11 +116,26 @@ class Gigatronics_2550B(Instrument):
             while '\n' not in reply:
                 reply = reply + self._socket.recv(512)
 
+                logging.debug(__name__ + ' : instrument says: ' + reply + ' in reply to: ' + querystr)
+
         except Exception:
             self.__tcp_lock.release()
             raise
 
-        self.__tcp_last_used = time.time()
+        # close connection immediately unless used many times within a short
+        # time interval
+        t = time.time()
+        if self.__tcp_connected:
+            if (t - self.__tcp_last_used) > self.__TCP_INACTIVE_PERIOD:
+                # close immediately
+                self.close_connection_gracefully()
+            elif self.__tcp_close_thread == None:
+                # delay closing
+                self.__tcp_close_thread = threading.Thread(target=self.__close_inactive_connection, name="gigatronics_delayed_close")
+                self.__tcp_close_thread.daemon = True  # a daemon thread doesn't prevent program from exiting
+                self.__tcp_close_thread.start()
+        
+        self.__tcp_last_used = t
         self.__tcp_lock.release()
 
         return reply
@@ -119,7 +151,18 @@ class Gigatronics_2550B(Instrument):
             self.__tcp_lock.release()
             raise
 
-        self.__tcp_last_used = time.time()
+        # close connection immediately unless used many times within a short
+        # time interval
+        t = time.time()
+        if self.__tcp_connected:
+            if (t - self.__tcp_last_used) > self.__TCP_INACTIVE_PERIOD:
+                self.close_connection_gracefully()
+            elif self.__tcp_close_thread == None:
+                self.__tcp_close_thread = threading.Thread(target=self.__close_inactive_connection, name="gigatronics_delayed_close")
+                self.__tcp_close_thread.daemon = True  # a daemon thread doesn't prevent program from exiting
+                self.__tcp_close_thread.start()
+        
+        self.__tcp_last_used = t
         self.__tcp_lock.release()
 
         return
@@ -143,19 +186,20 @@ class Gigatronics_2550B(Instrument):
             self.__tcp_connected = True
     
     def __close_inactive_connection(self):
-        while True:
-            t0 = time.time()
-            time.sleep(2.)
+        t0 = time.time()
+        while self.__tcp_connected:
+            time.sleep(self.__TCP_INACTIVE_PERIOD + .2)
             t1 = time.time()
             self.__tcp_lock.acquire()
             t2 = time.time()
             #logging.debug(__name__ + ' : tcp_connected == ' + str(self.__tcp_connected))
-            if (self.__tcp_connected) and ((time.time() - self.__tcp_last_used) > 3.0):
+            if self.__tcp_connected and (t2 - self.__tcp_last_used) > self.__TCP_INACTIVE_PERIOD:
                 self.close_connection_gracefully()
+                self.__tcp_close_thread = None
             t3 = time.time()
             self.__tcp_lock.release()
             t4 = time.time()
-            logging.debug(__name__ + ' : dt1 = {0:0.3f}, dt2 = {0:0.3f}, dt3 = {0:0.3f}, dt4 = {0:0.3f}'.format(t1-t0, t2-t1, t3-t2, t4-t3))
+        logging.debug(__name__ + ' : dt1 = {0:0.3f}, dt2 = {0:0.3f}, dt3 = {0:0.3f}, dt4 = {0:0.3f}'.format(t1-t0, t2-t1, t3-t2, t4-t3))
 
     def reset(self):
         '''
@@ -209,7 +253,240 @@ class Gigatronics_2550B(Instrument):
         self.get_phase()
         self.get_frequency()
         self.get_status()
+        self.get_alc_source()
+        self.get_trigger_source()
+        self.get_pulse_modulation()
+        self.get_pulse_modulation_source()
+        self.get_pulse_modulation_inverted_polarity()
+        self.get_power_correction_offset()
+        self.get_power_correction_slope()
+        self.get_reference_clock_source()
+        self.get_mode()
 
+    def do_get_mode(self):
+        '''
+        Get the source mode of operation.
+
+        Input:
+            None
+
+        Output:
+            string : "CW", "LIST", "FSWEEP", "PSWEEP"
+        '''
+        logging.debug(__name__ + ' : get source mode')
+        m = self.__ask('MODE?')
+        if m=='FIX':
+            return 'CW'
+        else:
+            return m
+
+    def do_get_alc_source(self):
+        '''
+        Get the Automatic Load Control source
+
+        Input:
+            None
+
+        Output:
+            string : "INT", "DIOD", "PMET", "DPOS"
+        '''
+        logging.debug(__name__ + ' : get ALC source')
+        s = self.__ask('POW:ALC:SOUR?')
+        if s[:3] == 'INT':
+            return 'INT'
+        else:
+            return s[:4]
+
+    def do_set_alc_source(self, val):
+        '''
+        Set the Automatic Load Control source
+        
+        Input:
+            val : "INT", "DIOD", "PMET", "DPOS"
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set ALC source to %f' % val)
+        self.__tell('POW:ALC:SOUR %s' % val)
+
+    def do_get_trigger_source(self):
+        '''
+        Get the trigger source
+
+        Input:
+            None
+
+        Output:
+            string : "INT", "EXT", "NOT IN SWEEP MODE"
+        '''
+        logging.debug(__name__ + ' : get trigger source')
+        s = self.__ask('TRIG:SOUR?')
+        if s[:3] == 'INT' or s[:3] == 'EXT':
+            return s[:3]
+        else:
+            return s
+
+    def do_set_trigger_source(self, val):
+        '''
+        Set the Automatic Load Control source
+        
+        Input:
+            val : "INT", "EXT"
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set trigger source to %f' % val)
+        self.__tell('TRIG:SOUR %s' % val)
+
+    def do_get_pulse_modulation(self):
+        '''
+        Whether pulse modulation is on or off.
+        
+        Input:
+            None
+
+        Output:
+            boolean
+        '''
+        logging.debug(__name__ + ' : get pulse modulation.')
+        state = self.__ask('PULM:STAT?')
+        return state == '1' or state == 'ON'
+
+    def do_set_pulse_modulation(self, val):
+        '''
+        Turn pulse modulation on/off.
+        
+        Input:
+            val : boolean
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set pulse modulation to %f' % val)
+        self.__tell('PULM:STAT %s' % str(int(val)))
+
+    def do_get_pulse_modulation_inverted_polarity(self):
+        '''
+        Whether the external pulse modulation polarity is inverted or not.
+        
+        Input:
+            None
+
+        Output:
+            boolean
+        '''
+        logging.debug(__name__ + ' : get pulse modulation inverted polarity')
+        state = self.__ask('PULM:EXT:POL?')
+        return state[:3] == 'INV'
+
+    def do_set_pulse_modulation_inverted_polarity(self, val):
+        '''
+        Turn inverting external pulse modulation polarity on/off.
+        
+        Input:
+            val : boolean
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set  to %f' % val)
+        self.__tell('PULM:EXT:POL %s' % ('INV' if val else 'NORM'))
+
+    def do_get_pulse_modulation_source(self):
+        '''
+        Get the pulse modulation source.
+        
+        Input:
+            None
+
+        Output:
+            string : "INT", "EXT"
+        '''
+        logging.debug(__name__ + ' : get pulse modulation source')
+        return self.__ask('PULM:SOUR?')[:3]
+
+    def do_set_pulse_modulation_source(self, val):
+        '''
+        Set the pulse modulation source
+        
+        Input:
+            val : "INT", "EXT"
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set  to %f' % val)
+        self.__tell('PULM:SOUR %s' % val)
+
+    def do_get_power_correction_offset(self):
+        '''
+        Get the offset power (loss correction).
+                
+        Input:
+            None
+
+        Output:
+           offset power in dB
+        '''
+        logging.debug(__name__ + ' : get loss correction')
+        return float(self.__ask('CORR:LOSS?'))
+
+    def do_set_power_correction_offset(self, val):
+        '''
+        Set the offset power (loss correction).
+
+        Input:
+            val (float) : offset power in dB
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set loss correction offset to %f dB' % val)
+        self.__tell('CORR:LOSS %s' % val)
+
+
+    def do_get_power_correction_slope(self):
+        '''
+        Get the power slope (loss correction).
+                
+        Input:
+            None
+
+        Output:
+           slope dB/GHz
+        '''
+        logging.debug(__name__ + ' : get loss correction slope')
+        return float(self.__ask('CORR:SLOP?'))
+
+    def do_set_power_correction_slope(self, val):
+        '''
+        Set the slope power (loss correction).
+
+        Input:
+            val (float) : slope power in dB/GHz
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set loss correction to %f dB/GHz' % val)
+        self.__tell('CORR:SLOP %s' % val)
+
+
+    def do_get_reference_clock_source(self):
+        '''
+        Get the reference clock source currently in use.
+        
+        Input:
+            None
+
+        Output:
+            string: 'INT', 'EXT'
+        '''
+        logging.debug(__name__ + ' : get reference clock source.')
+        return self.__ask('ROSC:SOUR?')[:3]
+        
     def do_get_power(self):
         '''
         Reads the power of the signal from the instrument
@@ -218,7 +495,7 @@ class Gigatronics_2550B(Instrument):
             None
 
         Output:
-            ampl (?) : power in ?
+            ampl (?) : power in dBm
         '''
         logging.debug(__name__ + ' : get power')
         return float(self.__ask('POW:AMPL?'))
@@ -228,7 +505,7 @@ class Gigatronics_2550B(Instrument):
         Set the power of the signal
 
         Input:
-            amp (float) : power in ??
+            amp (float) : power in dBm
 
         Output:
             None
