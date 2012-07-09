@@ -1,6 +1,5 @@
-# Gigatronics_2550B.py class, to perform the communication between the Wrapper and the device
-# Pieter de Groot <pieterdegroot@gmail.com>, 2008
-# Martijn Schaafsma <qtlab@mcschaafsma.nl>, 2008
+# Gigatronics_2550B.py class, for commucation with a Gigatronics 2550B microwave source.
+# Joonas Govenius <joonas.govenius@aalto.fi>, 2012
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,16 +16,12 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 from instrument import Instrument
-#import visa
+from lib import tcpinstrument
 import types
 import logging
 import numpy
-import re
-import socket
 import math
 import time
-import threading
-import struct
 
 
 class Gigatronics_2550B(Instrument):
@@ -35,7 +30,7 @@ class Gigatronics_2550B(Instrument):
 
     Usage:
     Initialize with
-    <name> = instruments.create('<name>', 'Gigatronics_2550B', address='<GBIP address>, reset=<bool>')
+    <name> = instruments.create('<name>', 'Gigatronics_2550B', address='<IPv4-address>:<TCP-port>, reset=<bool>')
     '''
 
     def __init__(self, name, address, reset=False):
@@ -54,21 +49,7 @@ class Gigatronics_2550B(Instrument):
         self.__cached_freq = -1.
         self.__cached_freq_timestamp = 0.
         
-        self.__tcp_lock = threading.Semaphore()
-        self.__tcp_close_thread = None
-        self.__tcp_connected = False
-        self.__tcp_last_used = 0.
-        self.__TCP_INACTIVE_PERIOD = 1. # period in seconds after which TCP connection is considered inactive
-        
-        self._address = address
-        self._tcpdst = re.match(r"^(\d+\.\d+\.\d+\.\d+):(\d+)", address).groups() # parse into IP & port
-        if len(self._tcpdst) != 2: raise Exception("Could not parse {0} into an IPv4 address and a port. Should be in format 192.168.1.1:2550.".format(address))
-
-        #self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        #self._socket.settimeout(3.) # timeout in seconds
-        #self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        #self._socket.bind(('0.0.0.0', 12550)) # always use the same LOCAL port because the device doesn't accept a new connection from a different port if the previous one wasn't properly closed
-        #self._socket.connect((self._tcpdst[0], int(self._tcpdst[1])))
+        self._visainstrument = tcpinstrument.TCPInstrument(address)
 
         self.add_parameter('power',
             flags=Instrument.FLAG_GETSET, units='dBm', minval=-135, maxval=16, type=types.FloatType)
@@ -105,101 +86,6 @@ class Gigatronics_2550B(Instrument):
         else:
             self.get_all()
 
-    def __ask(self, querystr):
-        self.__tcp_lock.acquire()
-
-        try:
-            self.__connect()
-            self._socket.sendall(querystr)
-
-            reply = ''
-            while '\n' not in reply:
-                reply = reply + self._socket.recv(512)
-
-                logging.debug(__name__ + ' : instrument says: ' + reply + ' in reply to: ' + querystr)
-
-        except Exception:
-            self.__tcp_lock.release()
-            raise
-
-        # close connection immediately unless used many times within a short
-        # time interval
-        t = time.time()
-        if self.__tcp_connected:
-            if (t - self.__tcp_last_used) > self.__TCP_INACTIVE_PERIOD:
-                # close immediately
-                self.close_connection_gracefully()
-            elif self.__tcp_close_thread == None:
-                # delay closing
-                self.__tcp_close_thread = threading.Thread(target=self.__close_inactive_connection, name="gigatronics_delayed_close")
-                self.__tcp_close_thread.daemon = True  # a daemon thread doesn't prevent program from exiting
-                self.__tcp_close_thread.start()
-        
-        self.__tcp_last_used = t
-        self.__tcp_lock.release()
-
-        return reply
-
-    def __tell(self, cmd):
-        self.__tcp_lock.acquire()
-
-        try:
-            self.__connect()
-            logging.debug(__name__ + ' : telling instrument to: ' + cmd)
-            self._socket.sendall(cmd)
-        except Exception:
-            self.__tcp_lock.release()
-            raise
-
-        # close connection immediately unless used many times within a short
-        # time interval
-        t = time.time()
-        if self.__tcp_connected:
-            if (t - self.__tcp_last_used) > self.__TCP_INACTIVE_PERIOD:
-                self.close_connection_gracefully()
-            elif self.__tcp_close_thread == None:
-                self.__tcp_close_thread = threading.Thread(target=self.__close_inactive_connection, name="gigatronics_delayed_close")
-                self.__tcp_close_thread.daemon = True  # a daemon thread doesn't prevent program from exiting
-                self.__tcp_close_thread.start()
-        
-        self.__tcp_last_used = t
-        self.__tcp_lock.release()
-
-        return
-
-    def __connect(self):
-        if not (self.__tcp_connected):
-            logging.debug(__name__ + ' : opening TCP socket')
-            self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            
-            # this should cause RST to be sent when socket.close() is called
-            l_onoff = 1
-            l_linger = 1
-            self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', l_onoff, l_linger))
-
-            # always use the same LOCAL port because the device doesn't accept a new connection from a different port if the previous one wasn't properly closed
-            #self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            #self._socket.bind(('0.0.0.0', 12550))
-            
-            self._socket.settimeout(3.) # timeout in seconds
-            self._socket.connect((self._tcpdst[0], int(self._tcpdst[1])))
-            self.__tcp_connected = True
-    
-    def __close_inactive_connection(self):
-        t0 = time.time()
-        while self.__tcp_connected:
-            time.sleep(self.__TCP_INACTIVE_PERIOD + .2)
-            t1 = time.time()
-            self.__tcp_lock.acquire()
-            t2 = time.time()
-            #logging.debug(__name__ + ' : tcp_connected == ' + str(self.__tcp_connected))
-            if self.__tcp_connected and (t2 - self.__tcp_last_used) > self.__TCP_INACTIVE_PERIOD:
-                self.close_connection_gracefully()
-                self.__tcp_close_thread = None
-            t3 = time.time()
-            self.__tcp_lock.release()
-            t4 = time.time()
-        logging.debug(__name__ + ' : dt1 = {0:0.3f}, dt2 = {0:0.3f}, dt3 = {0:0.3f}, dt4 = {0:0.3f}'.format(t1-t0, t2-t1, t3-t2, t4-t3))
 
     def reset(self):
         '''
@@ -212,31 +98,9 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.info(__name__ + ' : resetting instrument')
-        self.__tell('*RST')
+        self._visainstrument.write('*RST')
         self.get_all()
         
-    def close_connection_gracefully(self):
-        '''
-        Closes the TCP connection gracefully
-
-        Input:
-            None
-
-        Output:
-            None
-        '''
-        if self.__tcp_connected:
-            logging.debug(__name__ + ' : closing TCP socket')
-            try:
-                self._socket.shutdown(socket.SHUT_WR)
-                self._socket.settimeout(1.) # timeout in seconds
-                self._socket.recv(512)
-            except Exception:
-                logging.debug(__name__ + ' : failed to gracefully shutdown TCP socket.')
-            #time.sleep(0.5)
-            self._socket.close()
-            self.__tcp_connected = False
-
     def get_all(self):
         '''
         Reads all implemented parameters from the instrument,
@@ -274,7 +138,7 @@ class Gigatronics_2550B(Instrument):
             string : "CW", "LIST", "FSWEEP", "PSWEEP"
         '''
         logging.debug(__name__ + ' : get source mode')
-        m = self.__ask('MODE?')
+        m = self._visainstrument.ask('MODE?')
         if m=='FIX':
             return 'CW'
         else:
@@ -291,7 +155,7 @@ class Gigatronics_2550B(Instrument):
             string : "INT", "DIOD", "PMET", "DPOS"
         '''
         logging.debug(__name__ + ' : get ALC source')
-        s = self.__ask('POW:ALC:SOUR?')
+        s = self._visainstrument.ask('POW:ALC:SOUR?')
         if s[:3] == 'INT':
             return 'INT'
         else:
@@ -308,7 +172,7 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set ALC source to %f' % val)
-        self.__tell('POW:ALC:SOUR %s' % val)
+        self._visainstrument.write('POW:ALC:SOUR %s' % val)
 
     def do_get_trigger_source(self):
         '''
@@ -321,7 +185,7 @@ class Gigatronics_2550B(Instrument):
             string : "INT", "EXT", "NOT IN SWEEP MODE"
         '''
         logging.debug(__name__ + ' : get trigger source')
-        s = self.__ask('TRIG:SOUR?')
+        s = self._visainstrument.ask('TRIG:SOUR?')
         if s[:3] == 'INT' or s[:3] == 'EXT':
             return s[:3]
         else:
@@ -338,7 +202,7 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set trigger source to %f' % val)
-        self.__tell('TRIG:SOUR %s' % val)
+        self._visainstrument.write('TRIG:SOUR %s' % val)
 
     def do_get_pulse_modulation(self):
         '''
@@ -351,7 +215,7 @@ class Gigatronics_2550B(Instrument):
             boolean
         '''
         logging.debug(__name__ + ' : get pulse modulation.')
-        state = self.__ask('PULM:STAT?')
+        state = self._visainstrument.ask('PULM:STAT?')
         return state == '1' or state == 'ON'
 
     def do_set_pulse_modulation(self, val):
@@ -365,7 +229,7 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set pulse modulation to %f' % val)
-        self.__tell('PULM:STAT %s' % str(int(val)))
+        self._visainstrument.write('PULM:STAT %s' % str(int(val)))
 
     def do_get_pulse_modulation_inverted_polarity(self):
         '''
@@ -378,7 +242,7 @@ class Gigatronics_2550B(Instrument):
             boolean
         '''
         logging.debug(__name__ + ' : get pulse modulation inverted polarity')
-        state = self.__ask('PULM:EXT:POL?')
+        state = self._visainstrument.ask('PULM:EXT:POL?')
         return state[:3] == 'INV'
 
     def do_set_pulse_modulation_inverted_polarity(self, val):
@@ -392,7 +256,7 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set  to %f' % val)
-        self.__tell('PULM:EXT:POL %s' % ('INV' if val else 'NORM'))
+        self._visainstrument.write('PULM:EXT:POL %s' % ('INV' if val else 'NORM'))
 
     def do_get_pulse_modulation_source(self):
         '''
@@ -405,7 +269,7 @@ class Gigatronics_2550B(Instrument):
             string : "INT", "EXT"
         '''
         logging.debug(__name__ + ' : get pulse modulation source')
-        return self.__ask('PULM:SOUR?')[:3]
+        return self._visainstrument.ask('PULM:SOUR?')[:3]
 
     def do_set_pulse_modulation_source(self, val):
         '''
@@ -418,7 +282,7 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set  to %f' % val)
-        self.__tell('PULM:SOUR %s' % val)
+        self._visainstrument.write('PULM:SOUR %s' % val)
 
     def do_get_power_correction_offset(self):
         '''
@@ -431,7 +295,7 @@ class Gigatronics_2550B(Instrument):
            offset power in dB
         '''
         logging.debug(__name__ + ' : get loss correction')
-        return float(self.__ask('CORR:LOSS?'))
+        return float(self._visainstrument.ask('CORR:LOSS?'))
 
     def do_set_power_correction_offset(self, val):
         '''
@@ -444,7 +308,7 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set loss correction offset to %f dB' % val)
-        self.__tell('CORR:LOSS %s' % val)
+        self._visainstrument.write('CORR:LOSS %s' % val)
 
 
     def do_get_power_correction_slope(self):
@@ -458,7 +322,7 @@ class Gigatronics_2550B(Instrument):
            slope dB/GHz
         '''
         logging.debug(__name__ + ' : get loss correction slope')
-        return float(self.__ask('CORR:SLOP?'))
+        return float(self._visainstrument.ask('CORR:SLOP?'))
 
     def do_set_power_correction_slope(self, val):
         '''
@@ -471,7 +335,7 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set loss correction to %f dB/GHz' % val)
-        self.__tell('CORR:SLOP %s' % val)
+        self._visainstrument.write('CORR:SLOP %s' % val)
 
 
     def do_get_reference_clock_source(self):
@@ -485,7 +349,7 @@ class Gigatronics_2550B(Instrument):
             string: 'INT', 'EXT'
         '''
         logging.debug(__name__ + ' : get reference clock source.')
-        return self.__ask('ROSC:SOUR?')[:3]
+        return self._visainstrument.ask('ROSC:SOUR?')[:3]
         
     def do_get_power(self):
         '''
@@ -498,7 +362,7 @@ class Gigatronics_2550B(Instrument):
             ampl (?) : power in dBm
         '''
         logging.debug(__name__ + ' : get power')
-        return float(self.__ask('POW:AMPL?'))
+        return float(self._visainstrument.ask('POW:AMPL?'))
 
     def do_set_power(self, amp):
         '''
@@ -511,7 +375,7 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set power to %f' % amp)
-        self.__tell('POW:AMPL %s' % amp)
+        self._visainstrument.write('POW:AMPL %s' % amp)
 
     def do_get_phase(self):
         '''
@@ -525,7 +389,7 @@ class Gigatronics_2550B(Instrument):
         '''
         logging.debug(__name__ + ' : get phase')
 
-        rep = self.__ask('PHASE?')
+        rep = self._visainstrument.ask('PHASE?')
         m = re.match(r"^([\d\.]+) (RAD|DEG)", rep)
         if m == None or len(m.groups()) != 2: raise Exception('Failed to parse {0} in reply to PHASE?.'.format())
 
@@ -544,7 +408,7 @@ class Gigatronics_2550B(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set phase to %f' % phase)
-        self.__tell('PHASE %s RAD' % phase)
+        self._visainstrument.write('PHASE %s RAD' % phase)
 
     def do_get_frequency(self):
         '''
@@ -562,7 +426,7 @@ class Gigatronics_2550B(Instrument):
             return self.__cached_freq
 
         logging.debug(__name__ + ' : get frequency')
-        f = float(self.__ask('FREQ:CW?'))
+        f = float(self._visainstrument.ask('FREQ:CW?'))
         self.__cached_freq = f
         self.__cached_freq_timestamp = t
         return f
@@ -581,7 +445,7 @@ class Gigatronics_2550B(Instrument):
         f0 = self.do_get_frequency()
         
         logging.debug(__name__ + ' : set frequency to %f' % freq)
-        self.__tell('FREQ:CW %s' % freq)
+        self._visainstrument.write('FREQ:CW %s' % freq)
 
         self.__cached_freq = freq
         self.__cached_freq_timestamp = time.time()
@@ -604,7 +468,7 @@ class Gigatronics_2550B(Instrument):
             status (string) : 'On' or 'Off'
         '''
         logging.debug(__name__ + ' : get status')
-        stat = self.__ask('OUTP?').replace("\r", '').replace("\n", '')
+        stat = self._visainstrument.ask('OUTP?').replace("\r", '').replace("\n", '')
 
         if (stat=='1'):
           return 'on'
@@ -629,7 +493,7 @@ class Gigatronics_2550B(Instrument):
             status = status.upper()
         else:
             raise ValueError('set_status(): can only set on or off')
-        self.__tell('OUTP %s' % status)
+        self._visainstrument.write('OUTP %s' % status)
 
     # shortcuts
     def off(self):
