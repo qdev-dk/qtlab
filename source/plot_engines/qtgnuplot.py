@@ -118,6 +118,9 @@ class _QTGnuPlot():
         'y2tics': 'set y2tics\n',
         'ztics': 'set ztics\n',
 
+        'formatx': 'set format x "%s"\n',
+        'formaty': 'set format y "%s"\n',
+
         'xdata': 'set xdata %s\n',
         'x2data': 'set x2data %s\n',
         'ydata': 'set ydata %s\n',
