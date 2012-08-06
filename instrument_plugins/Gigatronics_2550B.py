@@ -22,6 +22,7 @@ import logging
 import numpy
 import math
 import time
+import re
 
 
 class Gigatronics_2550B(Instrument):
@@ -48,7 +49,7 @@ class Gigatronics_2550B(Instrument):
         self._visainstrument = tcpinstrument.TCPInstrument(address)
 
         self.add_parameter('power',
-            flags=Instrument.FLAG_GETSET, units='dBm', minval=-135, maxval=16, type=types.FloatType)
+            flags=Instrument.FLAG_GETSET, units='dBm', minval=-135, maxval=25, type=types.FloatType)
         self.add_parameter('phase',
             flags=Instrument.FLAG_GETSET, units='rad', minval=-numpy.pi, maxval=numpy.pi, type=types.FloatType)
         self.add_parameter('frequency',
@@ -436,11 +437,18 @@ class Gigatronics_2550B(Instrument):
         logging.debug(__name__ + ' : set frequency to %f' % freq)
         self._visainstrument.write('FREQ:CW %s' % freq)
 
-        #if freq <= 2e9: time.sleep(.5) # sleep 500ms so that power stabilizes
+        # the power takes a much longer time to stabilize for frequencies below 2 GHz
+        if freq <= 2e9: time.sleep(.1) # sleep 500ms so that power stabilizes
 
         # the output power drops for a short time when changing
         # frequency past certain boundaries
-        boundaries = [0.71e9, 0.18e9, 0.36e9, 0.675e9, 0.88e9, 1.01e9, 1.42e9, 2e9, 3.2e9, 4e9, 5.1e9, 8e9, 10.1e9, 12.7e9, 16.01e9, 20.2e9, 25.4e9, 28.2e9, 28.57e9, 30.09e9, 32.02e9, 39.6e9, 47.99e9]
+        boundaries = [
+            #0.71e9, 0.18e9, 0.27e9, 0.36e9, 0.675e9, 0.88e9, 1.01e9, 1.42e9,
+            2e9, 3.2e9, 4e9, 5.1e9, 8e9,
+            10.1e9, 12.7e9, 16.01e9,
+            20.2e9, 25.4e9, 28.2e9, 28.57e9,
+            30.09e9, 32.02e9, 39.6e9,
+            47.99e9]
         if any([ (f0 - b)*(freq - b) <= 0. for b in boundaries ]): time.sleep(.2) # sleep 200ms so that power stabilizes
         
     def do_get_status(self):
