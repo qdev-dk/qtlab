@@ -281,7 +281,7 @@ class Instrument(SharedGObject):
             options['tags'] = []
         if 'cache_time' not in options:
             options['cache_time'] = self._options['default_cache_time']
-        options['last_set_time'] = 0.  # unix time stamp
+        options['last_physical_access_time'] = 0.  # unix time stamp
 
         # If defining channels call add_parameter for each channel
         if 'channels' in options:
@@ -697,8 +697,9 @@ class Instrument(SharedGObject):
         if 'channel' in p and 'channel' not in kwargs:
             kwargs['channel'] = p['channel']
 
+        current_time = time.time()
         flags = p['flags']
-        if not query or flags & 8 or (time.time() - p['last_set_time']) < p['cache_time']: #self.FLAG_SOFTGET:
+        if not query or flags & 8 or (current_time - p['last_physical_access_time']) < p['cache_time']: #self.FLAG_SOFTGET:
             if 'value' in p:
                 if p['type'] == np.ndarray:
                     return np.array(p['value'])
@@ -738,6 +739,7 @@ class Instrument(SharedGObject):
                 logging.warning('Unable to cast value "%s" to %s', value, p['type'])
 
         p['value'] = value
+        p['last_physical_access_time'] = current_time
         return value
 
     def get(self, name, query=True, fast=False, **kwargs):
@@ -987,7 +989,7 @@ class Instrument(SharedGObject):
             config.save()
 
         p['value'] = value
-        p['last_set_time'] = time.time()
+        p['last_physical_access_time'] = time.time()
         return value
 
     def set(self, name, value=None, fast=False, **kwargs):
