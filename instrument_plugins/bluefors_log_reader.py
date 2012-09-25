@@ -25,6 +25,7 @@ import datetime
 import pytz
 from dateutil import tz
 import os
+import qt
 
 class bluefors_log_reader(Instrument):
     '''
@@ -221,14 +222,26 @@ class bluefors_log_reader(Instrument):
         def load_temperature_data(address, t):
             datestr = self.__time_to_datestr(t)
             fname = os.path.join(self._address, datestr, 'CH{0} T {1}.log'.format(channel, datestr))
-            try:
+
+            try:                
                 data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'temperature'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
                 # convert the date & time strings to a datetime object
                 data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
                 return data
             except Exception as e:
-                print 'Could not read the log file for the specified date. It probably does not exist, otherwise it must be corrupted.'
-                raise e
+                qt.msleep(600)
+                try:                
+                    data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'temperature'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
+                # convert the date & time strings to a datetime object
+                    data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
+                    return data                
+                #print 'Could not read the log file for the specified date...before waiting 600 s. It probably does not exist, otherwise it must be corrupted.'                
+                except ValueError:
+                    print "end."    
+                    
+            raise e
+
+
 
         return self.__interpolate_value_at_time(load_temperature_data, t)
 
@@ -255,7 +268,16 @@ class bluefors_log_reader(Instrument):
                 data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
                 return data
             except Exception as e:
-                print 'Could not read the log file for the specified date. It probably does not exist, otherwise it must be corrupted.'
+                qt.msleep(600)
+                try:
+                    data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'resistance'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
+                # convert the date & time strings to a datetime object
+                    data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
+                    return data             
+                #print "Could not read the log file for the specified date....(before waiting for 600 s!) It probably does not exist, otherwise it must be corrupted."
+                except ValueError:
+                    print "end."
+            
                 raise e
 
         return self.__interpolate_value_at_time(load_resistance_data, t)
@@ -285,8 +307,22 @@ class bluefors_log_reader(Instrument):
                             d[2] if d[3]==0 else float('nan')] for d in data ]
                 return data
             except Exception as e:
-                print 'Could not read the log file for the specified date. It probably does not exist, otherwise it must be corrupted.'
+                qt.msleep(600)
+                try:
+                    data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'pressure', 'status'), 'formats': ('S9', 'S8', 'f', 'i1')}, delimiter=',', usecols=(0,1,2+6*(channel-1)+3,2+6*(channel-1)+4))
+                # replace the value with NaN if the sensor is off (status != 0)
+                # and convert the date & time strings to a datetime object
+                    data = [ [datetime.datetime(int('20'+d[0][6:8]), int(d[0][3:5]), int(d[0][0:2]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()),
+                            d[2] if d[3]==0 else float('nan')] for d in data ]
+                    return data
+                #print 'Could not read the log file for the specified date....(before waiting for 600 s!) It probably does not exist, otherwise it must be corrupted.'
+                except ValueError:
+                    print "Could not convert data to an integer."
+
                 raise e
+            
+#print 'Could not read the log file for the specified date. It probably does not exist, otherwise it must be corrupted.'
+                
 
         return self.__interpolate_value_at_time(load_pressure_data, t)
 
@@ -312,8 +348,20 @@ class bluefors_log_reader(Instrument):
                 data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
                 return data
             except Exception as e:
-                print 'Could not read the log file for the specified date. It probably does not exist, otherwise it must be corrupted.'
+                qt.msleep(600)
+                try:
+                    data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'flow'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
+                # convert the date & time strings to a datetime object
+                    data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
+                    return data
+                
+#                print "Could not read the log file for the specified date ... (before waiting 600 s!). It probably does not exist, otherwise it must be corrupted."
+                except ValueError:
+                    print "Could not convert data to an integer."
+                    
                 raise e
+                
+                
 
         return self.__interpolate_value_at_time(load_flow_data, t)
 
