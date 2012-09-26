@@ -166,32 +166,13 @@ class bluefors_log_reader(Instrument):
 
         data = load_data(self._address, t)
 
-        # manually add a point for midnights, if first and last points are close to them.
-        # TODO: should really read the last/first points from the preceding/following day.
-        if len(data) >= 2:
-            data_spacing = (data[1][0] - data[0][0])
-            preceding_midnight = datetime.datetime(data[0][0].year, data[0][0].month, data[0][0].day, tzinfo=tz.tzlocal())
-            following_midnight = preceding_midnight + datetime.timedelta(1,0)
-            midnight_to_first_point = data[0][0] - preceding_midnight
-            last_point_to_midnight  = following_midnight - data[-1][0]
-            first_val = data[ 0][1]
-            last_val  = data[-1][1]
-            
-            if midnight_to_first_point < 2*data_spacing:
-                data = np.concatenate(([[preceding_midnight, first_val]], data), axis=0)
-            if last_point_to_midnight < 2*data_spacing:
-                data = np.append(data, [[following_midnight, last_val ]], axis=0)
-        
-        # ignore date and convert time to seconds since midnight
-        #data = np.array([ [int(d[1][0:2])*3600 + int(d[1][3:5])*60 + int(d[1][6:8]), d[2]] for d in data ])
-
-        #seconds_since_midnight = t.hour * 3600 + t.minute * 60 + t.second + t.microsecond * 1e-6
-
         # return the latest data point if nothing was specified.
         if at_time==None:
-            if (t - data[-1][0]).total_seconds() > 305:
-                print "WARN: last data point from {0} ago.".format(str(t - data[-1][0]))
-            return data[-1][1]
+          if (t - data[-1][0]).total_seconds() > 305:
+	    msg = "WARN: last data point from {0} ago.".format(str(t - data[-1][0]))
+	    logging.info(msg)
+            print msg
+          return data[-1][1]
         
         # create the interpolating function
         interpolated_val = interpolate.interp1d([ (d[0] - self._UNIX_EPOCH).total_seconds() for d in data ], data[:,1],
@@ -220,26 +201,34 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting temperature for channel {0} at t = {1}'.format(channel, str(t)))
         
         def load_temperature_data(address, t):
-            datestr = self.__time_to_datestr(t)
+	  # load the data from the preceding and following days as well
+	  all_data = None
+	  for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
+            datestr = self.__time_to_datestr(tt)
             fname = os.path.join(self._address, datestr, 'CH{0} T {1}.log'.format(channel, datestr))
 
-            try:                
-                data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'temperature'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
-                # convert the date & time strings to a datetime object
-                data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
-                return data
+	    try:
+	      logging.debug('Loading temperature data for %s.' % str(tt))
+              data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'temperature'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
+              # convert the date & time strings to a datetime object
+              data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
+	      if all_data == None:
+	        all_data = data
+	      else:
+		all_data = np.concatenate((all_data, data), axis=0)
+	       
             except Exception as e:
-                qt.msleep(600)
-                try:                
-                    data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'temperature'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
-                # convert the date & time strings to a datetime object
-                    data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
-                    return data                
-                #print 'Could not read the log file for the specified date...before waiting 600 s. It probably does not exist, otherwise it must be corrupted.'                
-                except ValueError:
-                    print "end."    
-                    
-            raise e
+	      logging.debug('Failed to load temperature data for %s. (Normal if in the future.)' % str(tt))
+              pass
+
+	    if all_data == None:
+	      msg = 'WARN: No temperature data loaded for t = %s.' % str(t)
+	      logging.info(msg)
+	      raise Exception(msg)
+
+		
+	  return all_data
+		
 
 
 
@@ -260,25 +249,29 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting resistance for channel {0} at t = {1}'.format(channel, str(t)))
         
         def load_resistance_data(address, t):
-            datestr = self.__time_to_datestr(t)
+	  # load the data from the preceding and following days as well
+	  all_data = None
+	  for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
+            datestr = self.__time_to_datestr(tt)
             fname = os.path.join(self._address, datestr, 'CH{0} R {1}.log'.format(channel, datestr))
             try:
-                data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'resistance'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
-                # convert the date & time strings to a datetime object
-                data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
-                return data
+               data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'resistance'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
+               # convert the date & time strings to a datetime object
+               data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
+	       if all_data == None:
+	         all_data = data
+	       else:
+		 all_data = np.concatenate((all_data, data), axis=0)
+	       
             except Exception as e:
-                qt.msleep(600)
-                try:
-                    data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'resistance'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
-                # convert the date & time strings to a datetime object
-                    data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
-                    return data             
-                #print "Could not read the log file for the specified date....(before waiting for 600 s!) It probably does not exist, otherwise it must be corrupted."
-                except ValueError:
-                    print "end."
-            
-                raise e
+               pass
+
+	    if all_data == None:
+	      msg = 'WARN: No resistance data loaded for t = %s.' % str(t)
+	      logging.info(msg)
+	      raise Exception(msg)
+
+	  return all_data
 
         return self.__interpolate_value_at_time(load_resistance_data, t)
 
@@ -297,33 +290,33 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting pressure for channel {0} at t = {1}'.format(channel, str(t)))
         
         def load_pressure_data(address, t):
-            datestr = self.__time_to_datestr(t)
+	  # load the data from the preceding and following days as well
+	  all_data = None
+	  for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
+            datestr = self.__time_to_datestr(tt)
             fname = os.path.join(self._address, datestr, 'Maxigauge {0}.log'.format(datestr))
             try:
-                data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'pressure', 'status'), 'formats': ('S9', 'S8', 'f', 'i1')}, delimiter=',', usecols=(0,1,2+6*(channel-1)+3,2+6*(channel-1)+4))
-                # replace the value with NaN if the sensor is off (status != 0)
-                # and convert the date & time strings to a datetime object
-                data = [ [datetime.datetime(int('20'+d[0][6:8]), int(d[0][3:5]), int(d[0][0:2]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()),
-                            d[2] if d[3]==0 else float('nan')] for d in data ]
-                return data
+              data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'pressure', 'status'), 'formats': ('S9', 'S8', 'f', 'i1')}, delimiter=',', usecols=(0,1,2+6*(channel-1)+3,2+6*(channel-1)+4))
+              # replace the value with NaN if the sensor is off (status != 0)
+              # and convert the date & time strings to a datetime object
+              data = [ [datetime.datetime(int('20'+d[0][6:8]), int(d[0][3:5]), int(d[0][0:2]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()),
+                          d[2] if d[3]==0 else float('nan')] for d in data ]
+	      if all_data == None:
+	        all_data = data
+	      else:
+		all_data = np.concatenate((all_data, data), axis=0)
+	       
             except Exception as e:
-                qt.msleep(600)
-                try:
-                    data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'pressure', 'status'), 'formats': ('S9', 'S8', 'f', 'i1')}, delimiter=',', usecols=(0,1,2+6*(channel-1)+3,2+6*(channel-1)+4))
-                # replace the value with NaN if the sensor is off (status != 0)
-                # and convert the date & time strings to a datetime object
-                    data = [ [datetime.datetime(int('20'+d[0][6:8]), int(d[0][3:5]), int(d[0][0:2]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()),
-                            d[2] if d[3]==0 else float('nan')] for d in data ]
-                    return data
-                #print 'Could not read the log file for the specified date....(before waiting for 600 s!) It probably does not exist, otherwise it must be corrupted.'
-                except ValueError:
-                    print "Could not convert data to an integer."
+              pass
 
-                raise e
-            
-#print 'Could not read the log file for the specified date. It probably does not exist, otherwise it must be corrupted.'
-                
+	    if all_data == None:
+	      msg = 'WARN: No pressure data loaded for t = %s.' % str(t)
+	      logging.info(msg)
+	      raise Exception(msg)
 
+	  return all_data
+
+	
         return self.__interpolate_value_at_time(load_pressure_data, t)
 
     def flow(self, t=None):
@@ -340,27 +333,30 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting flow at t = {0}'.format(str(t)))
         
         def load_flow_data(address, t):
-            datestr = self.__time_to_datestr(t)
+	  # load the data from the preceding and following days as well
+	  all_data = None
+	  for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
+            datestr = self.__time_to_datestr(tt)
             fname = os.path.join(self._address, datestr, 'Flowmeter {0}.log'.format(datestr))
             try:
-                data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'flow'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
-                # convert the date & time strings to a datetime object
-                data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
-                return data
+              data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'flow'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
+              # convert the date & time strings to a datetime object
+              data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
+	      if all_data == None:
+	        all_data = data
+	      else:
+		all_data = np.concatenate((all_data, data), axis=0)
+	       
             except Exception as e:
-                qt.msleep(600)
-                try:
-                    data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'flow'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
-                # convert the date & time strings to a datetime object
-                    data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
-                    return data
-                
-#                print "Could not read the log file for the specified date ... (before waiting 600 s!). It probably does not exist, otherwise it must be corrupted."
-                except ValueError:
-                    print "Could not convert data to an integer."
-                    
-                raise e
-                
+              pass
+
+	    if all_data == None:
+	      msg = 'WARN: No flow data loaded for t = %s.' % str(t)
+	      logging.info(msg)
+	      raise Exception(msg)
+
+		
+	  return all_data
                 
 
         return self.__interpolate_value_at_time(load_flow_data, t)
