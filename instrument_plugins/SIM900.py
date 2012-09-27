@@ -108,6 +108,7 @@ class SIM900(Instrument):
 
         self.add_function('reset')
         self.add_function('get_all')
+        self.add_function('set_port_voltage')
 
         if reset:
             self.reset()
@@ -240,6 +241,20 @@ class SIM900(Instrument):
             bytes = r[5:5+nbytes].replace("\n","").replace("\r","")
             logging.debug(__name__ + ' : parsed output on response: %s' % bytes)
             return bool(bytes)
+
+    def set_port_voltage(self, port, voltage):
+        if not isinstance(port, int):
+          raise Exception('port must be specified as an integer, not %s.' % str(port))
+        if port < 1 or port > 8:
+          raise Exception('port must be between 1 and 8, not %s.' % str(port))
+        getattr(self, 'set_port%s_voltage' % str(port))(voltage)
+
+    def get_port_voltage(self, port):
+        if not isinstance(port, int):
+          raise Exception('port must be specified as an integer, not %s.' % str(port))
+        if port < 1 or port > 8:
+          raise Exception('port must be between 1 and 8, not %s.' % str(port))
+        return getattr(self, 'get_port%s_voltage' % str(port))()
 
     def do_set_ramp_stepsize(self, stepsize):
         self._ramp_stepsize = stepsize
