@@ -67,9 +67,26 @@ class Agilent_34410A(Instrument):
         self.add_parameter('subtract_res_null_value',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='bool', type=types.BooleanType)
 
+        self.add_parameter('vac_autorange',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='bool', type=types.BooleanType)
+        self.add_parameter('vac_range',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='V', minval=0.1, maxval=1e3, type=types.FloatType)
+        self.add_parameter('vac_bandwidth',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='Hz', minval=3, maxval=200, type=types.FloatType)
+
+        self.add_parameter('trigger_source',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.StringType)
+        self.add_parameter('samples_per_trigger',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='', minval=1, maxval=50000, type=types.IntType)
+        self.add_parameter('trigger_delay',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='s', minval=0., maxval=3600., type=types.FloatType)
+
         self.add_function('reset')
         self.add_function ('get_all')
         self.add_function('get_reading')
+        self.add_function('measurement_init')
+        self.add_function('measurement_trigger')
+        self.add_function('measurement_fetch')
 
 
         if (reset):
@@ -93,7 +110,8 @@ class Agilent_34410A(Instrument):
 
     def get_reading(self):
         '''
-        Gets the current reading.
+        Get a new reading or readings (essentially, INIT and FETCH).
+        Only use this if trigger source is "IMM" or "EXT".
 
         Input:
             None
@@ -101,14 +119,58 @@ class Agilent_34410A(Instrument):
         Output:
             resistance in Ohms or voltage in Volts
         '''
-        logging.debug(__name__ + ' : getting current reading')
+        logging.debug(__name__ + ' : getting a new reading')
         p = self._visainstrument.ask('READ?')
         try:
             return float(p)
         except ValueError:
             print "Could not convert {0} to float.".format(p)
             return float('nan')
-		
+
+    def measurement_init(self):
+        '''
+        Go from the idle to waiting-for-trigger state.
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : INIT')
+        self._visainstrument.write('INIT')
+
+    def measurement_trigger(self):
+        '''
+        Send a software trigger.
+        (Device needs to be in the waiting-for-trigger state,
+         i.e. need to call init first. The software trigger
+         oly makes sense when trigger source is 'BUS'.)
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : TRG')
+        self._visainstrument.write('*TRG')
+
+    def measurement_fetch(self):
+        '''
+        Fetch the data obtained after the last trigger.
+        (Typically you need to call init and trigger first.)
+
+        Input:
+            None
+
+        Output:
+            np.ndarray of resistance in Ohms or voltage in Volts
+        '''
+        logging.debug(__name__ + ' : FETCH')
+        s = self._visainstrument.ask('FETC?')
+        return numpy.array([float(n) for n in s.split(',')])
+
     def get_all(self):
         '''
         Reads all implemented parameters from the instrument,
@@ -128,13 +190,18 @@ class Agilent_34410A(Instrument):
         self.get_v_nplc()
         self.get_v_autorange()
         self.get_v_range()
+        self.get_vac_autorange()
+        self.get_vac_range()
+        self.get_vac_bandwidth()
         self.get_offset_compensation()
         self.get_subtract_res_null_value()
         self.get_res_null_value()
+        self.get_samples_per_trigger()
+        self.get_trigger_delay()
 
     def do_get_measurement_function(self):
         '''
-	Ask what is being measured.
+        Ask what is being measured.
 
         Input:
             None
@@ -142,15 +209,15 @@ class Agilent_34410A(Instrument):
         Output:
             function (string) : what is being measured ('RES', 'VOLT:DC')
         '''
-	r = self._visainstrument.ask('SENS:FUNC?')
+        r = self._visainstrument.ask('SENS:FUNC?')
         logging.debug(__name__ + ' : get measurement function: ' + r)
-	r = r.replace('"','')
-	if r == 'VOLT': r = 'VOLT:DC'
+        r = r.replace('"','')
+        if r == 'VOLT': r = 'VOLT:DC'
         return r
 
     def do_set_measurement_function(self, val):
         '''
-	Set what is being measured.
+        Set what is being measured.
 
         Input:
             function (string) : what is being measured ('RES', 'VOLT:DC')
@@ -158,12 +225,12 @@ class Agilent_34410A(Instrument):
         Output:
             None
         '''
-	if val == 'VOLT': val = 'VOLT:DC'
+        if val == 'VOLT': val = 'VOLT:DC'
         logging.debug(__name__ + ' : set measurement_function to %s' % val)
-	if val not in ['RES', 'VOLT:DC']:
-		raise Exception('Unknown measurement function: %s' % val)
+        if val not in ['RES', 'VOLT:DC', 'VOLT:AC']:
+                raise Exception('Unknown measurement function: %s' % val)
         self._visainstrument.write('SENS:FUNC "%s"' % val)
-	
+        
     def do_get_res_nplc(self):
         '''
 
@@ -243,7 +310,7 @@ class Agilent_34410A(Instrument):
             None
 
         Output:
-            len (int) : averaging length
+            range (V)
         '''
         logging.debug(__name__ + ' : get v_range')
         return float(self._visainstrument.ask('SENS:VOLT:DC:RANG?'))
@@ -252,7 +319,7 @@ class Agilent_34410A(Instrument):
         '''
 
         Input:
-            len (int) : averaging length
+            range (V)
 
         Output:
             None
@@ -260,6 +327,54 @@ class Agilent_34410A(Instrument):
         logging.debug(__name__ + ' : set v_range to %f' % val)
         self._visainstrument.write('SENS:VOLT:DC:RANG %s' % val)
 
+    def do_get_vac_range(self):
+        '''
+
+        Input:
+            None
+
+        Output:
+            range (V)
+        '''
+        logging.debug(__name__ + ' : get vac_range')
+        return float(self._visainstrument.ask('SENS:VOLT:AC:RANG?'))
+
+    def do_set_vac_range(self, val):
+        '''
+
+        Input:
+            range (V)
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set vac_range to %f' % val)
+        self._visainstrument.write('SENS:VOLT:AC:RANG %s' % val)
+
+    def do_get_vac_bandwidth(self):
+        '''
+
+        Input:
+            None
+
+        Output:
+            range (V)
+        '''
+        logging.debug(__name__ + ' : get vac_bandwidth')
+        return float(self._visainstrument.ask('SENS:VOLT:AC:BAND?'))
+
+    def do_set_vac_bandwidth(self, val):
+        '''
+
+        Input:
+            range (V)
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set vac_bandwidth to %f' % val)
+        self._visainstrument.write('SENS:VOLT:AC:BAND %s' % val)
+        
     def do_get_res_null_value(self):
         '''
         Null value is subtracted from the measurement (if option turned on).
@@ -296,7 +411,7 @@ class Agilent_34410A(Instrument):
         Output:
             len (int) : averaging length
         '''
-	r = self._visainstrument.ask('SENS:RES:RANG:AUTO?')
+        r = self._visainstrument.ask('SENS:RES:RANG:AUTO?')
         logging.debug(__name__ + ' : get res_autorange: ' + r)
         return bool(int(r))
 
@@ -323,7 +438,7 @@ class Agilent_34410A(Instrument):
         Output:
             len (int) : averaging length
         '''
-	r = self._visainstrument.ask('SENS:VOLT:DC:RANG:AUTO?')
+        r = self._visainstrument.ask('SENS:VOLT:DC:RANG:AUTO?')
         logging.debug(__name__ + ' : get v_autorange: ' + r)
         return bool(int(r))
 
@@ -340,6 +455,33 @@ class Agilent_34410A(Instrument):
         logging.debug(__name__ + ' : set v_autorange to %f' % val)
         self._visainstrument.write('SENS:VOLT:DC:RANG:AUTO %s' % int(val))
         
+    def do_get_vac_autorange(self):
+        '''
+        Is vac_autorange on?
+
+        Input:
+            None
+
+        Output:
+            len (int) : averaging length
+        '''
+        r = self._visainstrument.ask('SENS:VOLT:AC:RANG:AUTO?')
+        logging.debug(__name__ + ' : get vac_autorange: ' + r)
+        return bool(int(r))
+
+    def do_set_vac_autorange(self, val):
+        '''
+        Sets vac_autorange on/off.
+
+        Input:
+            len (int) : averaging length
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set vac_autorange to %f' % val)
+        self._visainstrument.write('SENS:VOLT:AC:RANG:AUTO %s' % int(val))
+        
     def do_get_offset_compensation(self):
         '''
 
@@ -349,7 +491,7 @@ class Agilent_34410A(Instrument):
         Output:
             len (int) : averaging length
         '''
-	r = self._visainstrument.ask('SENS:RES:OCOM?')
+        r = self._visainstrument.ask('SENS:RES:OCOM?')
         logging.debug(__name__ + ' : get offset_compensation: ' + r)
         return bool(int(r))
 
@@ -374,7 +516,7 @@ class Agilent_34410A(Instrument):
         Output:
             len (int) : averaging length
         '''
-	r = self._visainstrument.ask('SENS:RES:NULL?')
+        r = self._visainstrument.ask('SENS:RES:NULL?')
         logging.debug(__name__ + ' : get res_null value subtraction: ' + r)
         return bool(int(r))
 
@@ -389,3 +531,81 @@ class Agilent_34410A(Instrument):
         '''
         logging.debug(__name__ + ' : set subtract_res_null_value to %f' % val)
         self._visainstrument.write('SENS:RES:NULL %s' % int(val))
+
+    def do_get_samples_per_trigger(self):
+        '''
+
+        Input:
+            None
+
+        Output:
+            samples (int)
+        '''
+        r = self._visainstrument.ask('SAMP:COUN?')
+        logging.debug(__name__ + ' : get samples_per_trigger: %s' % r)
+        return int(r)
+
+    def do_set_samples_per_trigger(self, val):
+        '''
+
+        Input:
+            samples (int) [1, 5e4]
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set samples_per_trigger to %f' % val)
+        self._visainstrument.write('SAMP:COUN %u' % val)
+
+    def do_get_trigger_delay(self):
+        '''
+
+        Input:
+            None
+
+        Output:
+            delay in seconds (float)
+        '''
+        r = self._visainstrument.ask('TRIG:DEL?')
+        logging.debug(__name__ + ' : get trigger_delay: %s' % r)
+        return float(r)
+
+    def do_set_trigger_delay(self, val):
+        '''
+
+        Input:
+            delay in seconds (float) [0., 3600.]
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set trigger_delay to %f' % val)
+        self._visainstrument.write('TRIG:DEL %s' % val)
+
+
+    def do_get_trigger_source(self):
+        '''
+
+        Input:
+            None
+
+        Output:
+            source ['IMM', 'EXT', 'BUS']
+        '''
+        r = self._visainstrument.ask('TRIG:SOUR?')
+        logging.debug(__name__ + ' : get trigger_source: %s' % r)
+        return r
+
+    def do_set_trigger_source(self, val):
+        '''
+
+        Input:
+            source ['IMM', 'EXT', 'BUS']
+
+        Output:
+            None
+        '''
+        if val not in ['IMM', 'EXT', 'BUS']:
+          raise Exception('Invalid trigger source "%s". Should be "IMM", "EXT" or "BUS".')
+        logging.debug(__name__ + ' : set trigger_source to %s' % val)
+        self._visainstrument.write('TRIG:SOUR %s' % val)
