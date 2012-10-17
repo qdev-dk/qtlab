@@ -48,6 +48,12 @@ class SIM900(Instrument):
         Instrument.__init__(self, name, tags=['physical'])
         self._address = address
         self._visainstrument = visa.instrument(self._address)
+        
+        self._last_communication_time = time.time()
+        self._min_time_between_commands = 0.1  # in seconds
+
+        for port in range(1,9):
+          self.clear_output_buffer(port)
 
         self.add_parameter('port1_voltage', type=types.FloatType,
             flags=Instrument.FLAG_GETSET,
@@ -130,7 +136,7 @@ class SIM900(Instrument):
             None
         '''
         logging.info(__name__ + ' : Resetting instrument')
-        self._visainstrument.write('*RST')
+        self._write('*RST')
         self.get_all()
 
     def get_all(self):
@@ -164,23 +170,45 @@ class SIM900(Instrument):
         self.get_ramp_stepsize()
         self.get_ramp_delaytime()
 
+
+    def _ask(self, cmd):
+        t = time.time()
+        dt = t - self._last_communication_time
+        if dt < self._min_time_between_commands:
+          time.sleep(self._min_time_between_commands - dt)
+        self._last_communication_time = t
+        
+        return self._visainstrument.ask(cmd)
+
+    def _write(self, cmd):
+        t = time.time()
+        dt = t - self._last_communication_time
+        if dt < self._min_time_between_commands:
+          time.sleep(self._min_time_between_commands - dt)
+        self._last_communication_time = t
+        
+        self._visainstrument.write(cmd)
+        
         
     def clear_output_buffer(self, port):
         for j in range(30):
-            bytes_waiting = self._visainstrument.ask('NOUT? %s' % port)
+          resp = self._ask('GETN? %s,80' % port)
+          if len(resp) == 5:   # we expect "#3000" if there is nothing in the buffer
+            return
+            # bytes_waiting = self._ask('NOUT? %s' % port)
 
-            if int(bytes_waiting) == 0:
-                return
-            else:
-                self._visainstrument.ask('GETN? %s,80' % port)
-                self._visainstrument.write('FLSO %s' % port)
-                if j%10 == 0: logging.debug(__name__ + ' : output bytes waiting for port %s: %s' % (port, bytes_waiting))
+            # if int(bytes_waiting) == 0:
+                # return
+            # else:
+                # self._ask('GETN? %s,80' % port)
+                # self._write('FLSO %s' % port)
+                # if j%10 == 0: logging.debug(__name__ + ' : output bytes waiting for port %s: %s' % (port, bytes_waiting))
         
-        assert(False)
+        raise Exception('Could not clear output buffer. Still getting: %s' % s)
 
     def wait_until_input_read(self, port):
         for j in range(30):
-            bytes_waiting = self._visainstrument.ask('NINP? %s' % port)
+            bytes_waiting = self._ask('NINP? %s' % port)
             if int(bytes_waiting) == 0:
                 return
             else:
@@ -191,6 +219,7 @@ class SIM900(Instrument):
         assert(False)
 
     def _set_voltage(self, port, voltage):
+        if np.abs(voltage) < 9e-4: voltage = 0.   # the SIM doesn't like the minus in front of zero.
         logging.debug(__name__ + ' : setting port %s voltage to %s V' % (port, voltage))
         
         stepsize = self.get_ramp_stepsize()
@@ -200,50 +229,69 @@ class SIM900(Instrument):
         if np.isnan(old): old = voltage
         
         for v in np.linspace(old, voltage, 2 + int(np.abs(voltage-old)/stepsize)):
-            self._visainstrument.write('SNDT %s,"VOLT %s"' % (port, v))
             time.sleep(delay)  # wait time between steps
+            self._write('SNDT %s,"VOLT %s"' % (port, v))
 
     def _get_voltage(self, port):
         self.clear_output_buffer(port)
         
-        self._visainstrument.write('SNDT %s,"VOLT?"' % port)
+        self._write('SNDT %s,"VOLT?"' % port)
+        #time.sleep(0.1)
         #self.wait_until_input_read(port)
-        time.sleep(0.1)
-        r = self._visainstrument.ask('GETN? %s,80' % port)
-        logging.debug(__name__ + ' : getting port %s voltage: %s' % (port, r))
         
-        assert(r[:2]=="#3")
-        nbytes = int(r[2:5])
+        for attempt in range(5):
+          r = self._ask('GETN? %s,80' % port)
+          logging.debug(__name__ + ' : getting port %s voltage: %s' % (port, r))
+        
+          if (r[:2]!="#3"): raise Exception('Response %s is not in the expected format' % r)
+          
+          nbytes = int(r[2:5])
 
-        if (nbytes < 1):
-            return float('nan')
-        else:
+          if (nbytes < 1):
+            time.sleep((1+attempt)*0.1)
+            continue
+          else:
             bytes = r[5:5+nbytes].replace("\n","").replace("\r","")
             logging.debug(__name__ + ' : parsed voltage response: %s' % bytes)
             return float(bytes)
+        
+        msg = "WARN: Could not get voltage for port %u." % port
+        logging.info(msg)
+        print msg
+        return float('nan')
 
     def _set_on(self, port, val):
         logging.debug(__name__ + ' : setting port %s output to %s' % (port, val))
-        self._visainstrument.write('SNDT %s,"EXON %s"' % (port, int(val)))
+        self._write('SNDT %s,"EXON %s"' % (port, int(val)))
+        delay = self.get_ramp_delaytime()
 
     def _get_on(self, port):
         self.clear_output_buffer(port)
 
-        self._visainstrument.write('SNDT %s,"EXON?"' % port)
+        self._write('SNDT %s,"EXON?"' % port)
         #self.wait_until_input_read(port)
-        time.sleep(0.1)
-        r = self._visainstrument.ask('GETN? %s,80' % port)
-        logging.debug(__name__ + ' : getting port %s output state: %s' % (port, r))
-        
-        assert(r[:2]=="#3")
-        nbytes = int(r[2:5])
 
-        if (nbytes < 1):
-            return None
-        else:
+        for attempt in range(5):
+          time.sleep(0.2)
+          r = self._ask('GETN? %s,80' % port)
+          logging.debug(__name__ + ' : getting port %s output state: %s' % (port, r))
+        
+          if (r[:2]!="#3"): raise Exception('Response %s is not in the expected format' % r)
+        
+          nbytes = int(r[2:5])
+
+          if (nbytes < 1):
+            time.sleep((1+attempt)*0.1)
+            continue
+          else:
             bytes = r[5:5+nbytes].replace("\n","").replace("\r","")
             logging.debug(__name__ + ' : parsed output on response: %s' % bytes)
             return bool(bytes)
+
+        msg = "WARN: Could not determine whether port %u is on." % port
+        logging.info(msg)
+        print msg
+        return float('nan')
 
     def set_port_voltage(self, port, voltage):
         if not isinstance(port, int):
