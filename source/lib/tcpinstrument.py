@@ -53,18 +53,22 @@ class TCPInstrument():
         self._tcpdst = re.match(r"^(\d+\.\d+\.\d+\.\d+):(\d+)", address).groups() # parse into IP & port
         if len(self._tcpdst) != 2: raise Exception("Could not parse {0} into an IPv4 address and a port. Should be in format 192.168.1.1:2550.".format(address))
 
-    def ask(self, querystr):
+    def ask(self, querystr, end_of_message='\n', wait_time=None):
         self.__tcp_lock.acquire()
 
         try:
             self.__connect()
-            self._socket.sendall(querystr)
+            if querystr != None:  self._socket.sendall(querystr)
+            if wait_time != None: time.sleep(wait_time)
 
-            reply = ''
-            while '\n' not in reply:
+            reply = self._socket.recv(512)
+            while (end_of_message != None) and (end_of_message not in reply):
                 reply = reply + self._socket.recv(512)
 
-                logging.debug(__name__ + ' : ' + self._address + ' says ' + reply.replace("\n", " ").replace("\r", " ") + ' in response to ' + querystr.replace("\n", " ").replace("\r", " "))
+            if querystr != None:
+              logging.debug(__name__ + ' : ' + self._address + ' says ' + reply.replace("\n", " ").replace("\r", " ") + ' in response to ' + querystr.replace("\n", " ").replace("\r", " "))
+            else:
+              logging.debug(__name__ + ' : ' + self._address + ' says ' + reply.replace("\n", " ").replace("\r", " "))
 
         except Exception:
             self.__tcp_lock.release()
@@ -87,6 +91,9 @@ class TCPInstrument():
         self.__tcp_lock.release()
 
         return reply
+
+    def read(self):
+        self.ask(None)
 
     def write(self, cmd):
         self.__tcp_lock.acquire()
