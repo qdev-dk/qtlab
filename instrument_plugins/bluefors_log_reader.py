@@ -51,7 +51,10 @@ class bluefors_log_reader(Instrument):
         # Add some global constants
         self._address = address
         self._UNIX_EPOCH = datetime.datetime(1970, 1, 1, 0, 0, tzinfo = pytz.utc)
-
+        
+        self._heater_current_to_t6_calibration_ends = 0.006 # in amps
+        self._heater_current_to_t6_polyfit_coefficients = np.array([-2.07985, 1.97048e3, -1.71080e6, 8.57267e8, - 2.25600e11, 2.95946e13, -1.52644e15]) # for current in A, gives log10(T/K)
+        
         # t, r: 1,2,5,6
         self.add_parameter('latest_t1',
             flags=Instrument.FLAG_GET, units='K', type=types.FloatType)
@@ -92,6 +95,8 @@ class bluefors_log_reader(Instrument):
         self.add_function('pressure')
         self.add_function('flow')
         self.add_function ('get_all')
+        
+        self.add_function('base_heater_current_to_t6')
 
 
         # if (reset):
@@ -164,13 +169,19 @@ class bluefors_log_reader(Instrument):
         else:
             t = at_time
 
-        data = load_data(self._address, t)
+        try:
+          data = load_data(self._address, t)
+        except:
+            msg = "WARN: Couldn't load data for {0}. Returning NaN".format(str(t))
+            logging.info(msg)
+            print msg
+            return np.NaN
 
         # return the latest data point if nothing was specified.
         if at_time==None:
           if (t - data[-1][0]).total_seconds() > 305:
-	    msg = "WARN: last data point from {0} ago.".format(str(t - data[-1][0]))
-	    logging.info(msg)
+            msg = "WARN: last data point from {0} ago.".format(str(t - data[-1][0]))
+            logging.info(msg)
             print msg
           return data[-1][1]
         
@@ -185,6 +196,28 @@ class bluefors_log_reader(Instrument):
             raise e
         
         return val
+
+    def base_heater_current_to_t6(self, current):
+      try:
+        t6 = np.zeros(len(current))
+        past_calibration_range = current.max() > self._heater_current_to_t6_calibration_ends
+        scalar_input = False
+      except TypeError:
+        t6 = np.zeros(1)
+        past_calibration_range = current > self._heater_current_to_t6_calibration_ends
+        scalar_input = True
+      
+      if past_calibration_range:
+        print "WARN: t6 has not been calibrated for heater currents exceeding %.3e Amp." % self._heater_current_to_t6_calibration_ends
+      
+      for deg, coeff in enumerate(self._heater_current_to_t6_polyfit_coefficients):
+        t6 += coeff * np.power(current, deg)
+      
+      # convert from log10 to linear scale
+      t6 = np.power(10., t6)
+      
+      if scalar_input: return t6[0]
+      else:            return t6
 
     def temperature(self, channel, t=None):
         '''
