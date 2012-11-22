@@ -60,7 +60,7 @@ class Oxford_Mercury_IPS(Instrument):
         self._address = address
         self._number = number
         #self._visainstrument = visa.SerialInstrument(self._address)
-        self._visainstrument = tcpinstrument.TCPInstrument(address)
+        self._visainstrument = tcpinstrument.TCPInstrument(address, tcp_inactive_period = 30., tcp_min_time_between_connections = 0.5)
         self._values = {}
         #self._visainstrument.stop_bits = 2
 
