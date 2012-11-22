@@ -44,7 +44,7 @@ class Agilent_34410A(Instrument):
 
         # Add some global constants
         self._address = address
-        self._visainstrument = visa.instrument(self._address)
+        self._visainstrument = visa.instrument(self._address, timeout=30) # timeout is in seconds
 
         self.add_parameter('measurement_function',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.StringType)
