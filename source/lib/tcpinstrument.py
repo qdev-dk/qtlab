@@ -21,6 +21,7 @@ import re
 import socket
 import time
 import logging
+import numpy as np
 
 
 class TCPInstrument():
@@ -33,7 +34,7 @@ class TCPInstrument():
 
     """
 
-    def __init__(self, address, tcp_inactive_period = 1.):
+    def __init__(self, address, tcp_inactive_period = 1., tcp_min_time_between_connections = 0.1):
         '''
             Address must be given as <IPv4-address>:<TCP-port> in base 10 notation, e.g. "10.0.0.1:2550".
             
@@ -44,9 +45,13 @@ class TCPInstrument():
         self.__tcp_close_thread = None
         self.__tcp_connected = False
         self.__tcp_last_used = 0.
+        self.__tcp_last_closed = 0.
         
         # period in seconds after which TCP connection is considered inactive and will be closed
-        self.__TCP_INACTIVE_PERIOD = tcp_inactive_period
+        self.__TCP_INACTIVE_PERIOD = np.max(tcp_inactive_period, 0.)
+        
+        # minimum time period between closing a TCP connection and opening a new one
+        self.__MIN_TIME_BETWEEN_CONNECTIONS = tcp_min_time_between_connections
         
         # address must be given as <IPv4-address>:<TCP-port>, e.g. "10.0.0.1:2550".
         self._address = address
@@ -78,7 +83,7 @@ class TCPInstrument():
         # time interval
         t = time.time()
         if self.__tcp_connected:
-            if (t - self.__tcp_last_used) > self.__TCP_INACTIVE_PERIOD:
+            if (t - self.__tcp_last_used) >= self.__TCP_INACTIVE_PERIOD:
                 # close immediately
                 self.close_connection_gracefully()
             elif self.__tcp_close_thread == None:
@@ -110,7 +115,7 @@ class TCPInstrument():
         # time interval
         t = time.time()
         if self.__tcp_connected:
-            if (t - self.__tcp_last_used) > self.__TCP_INACTIVE_PERIOD:
+            if (t - self.__tcp_last_used) >= self.__TCP_INACTIVE_PERIOD:
                 # close immediately
                 self.close_connection_gracefully()
             elif self.__tcp_close_thread == None:
@@ -145,10 +150,15 @@ class TCPInstrument():
             #time.sleep(0.5)
             self._socket.close()
             self.__tcp_connected = False
+            self.__tcp_last_closed = time.time()
 
     def __connect(self):
         if not (self.__tcp_connected):
             logging.debug(__name__ + ' : opening TCP socket to ' + self._address)
+
+            time_to_wait = self.__MIN_TIME_BETWEEN_CONNECTIONS - (time.time() - self.__tcp_last_closed)
+            if time_to_wait > 0.: time.sleep(time_to_wait)
+
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             
             # this should cause RST to be sent when socket.close() is called
@@ -168,7 +178,7 @@ class TCPInstrument():
             self.__tcp_lock.acquire()
             t2 = time.time()
             #logging.debug(__name__ + ' : tcp_connected == ' + str(self.__tcp_connected))
-            if self.__tcp_connected and (t2 - self.__tcp_last_used) > self.__TCP_INACTIVE_PERIOD:
+            if self.__tcp_connected and (t2 - self.__tcp_last_used) >= self.__TCP_INACTIVE_PERIOD:
                 self.close_connection_gracefully()
                 self.__tcp_close_thread = None
             t3 = time.time()
