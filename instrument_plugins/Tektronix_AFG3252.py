@@ -1,0 +1,583 @@
+# Driver for Tektronix_AFG3252
+# Russell Lake <russell.lake@aalto.fi>
+# Joonas Govenius <joonas.govenius@aalto.fi>
+#
+# Based originally on the Tektronix_AWG5014.py class. 
+# Pieter de Groot <pieterdegroot@gmail.com>, 2008
+# Martijn Schaafsma <qtlab@mcschaafsma.nl>, 2008
+# Guenevere Prawiroatmodjo <guen@vvtp.tudelft.nl>, 2009
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
+from instrument import Instrument
+import visa
+import types
+import logging
+import numpy as np
+import struct
+import base64
+
+class Tektronix_AFG3252(Instrument):
+    '''
+    This is the python driver for the Tektronix AFG3252
+    Arbitrary Waveform Generator
+
+    Usage:
+    Initialize with
+    <name> = instruments.create('name', 'Tektronix_AFG3252', address='<GPIB address>',
+        reset=<bool>, numpoints=<int>)
+
+    think about:    clock, waveform length
+
+    TODO:
+    1) Get All
+    2) Remove test_send??
+    3) Add docstrings
+    4) Add 4-channel compatibility
+    '''
+
+    def __init__(self, name, address, reset=False, clock=1e9, numpoints=1000):
+        '''
+        Initializes the AFG3252.
+
+        Input:
+            name (string)    : name of the instrument
+            address (string) : GPIB address
+            reset (bool)     : resets to default values, default=false
+            numpoints (int)  : sets the number of datapoints
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Initializing instrument')
+        Instrument.__init__(self, name, tags=['physical'])
+
+
+        self._address = address
+        self._visainstrument = visa.instrument(self._address)
+        self._values = {}
+        self._values['files'] = {}
+        self._clock = clock
+        self._numpoints = numpoints
+
+        # Add parameters
+        self.add_parameter('output', type=types.FloatType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            channels=(1, 2), channel_prefix='ch%d_')
+
+        self.add_parameter('clock', type=types.FloatType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            minval=1e6, maxval=1e9, units='Hz')
+
+        self.add_parameter('amplitude', type=types.FloatType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            channels=(1, 2), minval=0, maxval=2, units='Volts', channel_prefix='ch%d_')
+
+        self.add_parameter('offset', type=types.FloatType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            channels=(1, 2), minval=-2, maxval=2, units='Volts', channel_prefix='ch%d_')
+
+        self.add_parameter('frequency', type=types.FloatType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            channels=(1, 2), minval=1E-6, maxval=240E6, units='Hz', channel_prefix='ch%d_')
+
+        self.add_parameter('output_impedance', type=types.FloatType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            channels=(1, 2), minval=1, maxval=1E4, units='Ohm', channel_prefix='ch%d_')
+
+        self.add_parameter('shape', type=types.StringType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            channels=(1, 2), channel_prefix='ch%d_' , format_map = {
+                "SIN" : "Sine",
+                "SQU" : "Square",
+                "PULS" : "Pulse",
+                "RAMP" : "Ramp",
+                "PRN" : "Noise",
+                "DC" : "DC",
+                "SINC" : "Sin(x)/x ",
+                "GAUS" : "Gaussian",
+                "LOR" : "Lorentz",
+                "ERIS" : "Exp Rise",
+                "EDEC" : "Exp Decay", 
+                "HAV" : "Haversine",
+                "USER1" :"USER1", 
+                "USER2" :"USER2", 
+                "USER3" :"USER3", 
+                "USER4" :"USER4", 
+                "EMEM" : "Edit Memory",
+                "EFIL" : "EFile"}
+)
+
+
+        self.add_parameter('waveform_data', type=types.StringType, flags=Instrument.FLAG_GET, channels=(1, 2), channel_prefix='ch%d_')
+
+        self.add_parameter('polarity', type=types.StringType, flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET, channels=(1, 2),channel_prefix='ch%d_', format_map={"INV" : "inverted","NORM" : "normal"}
+)
+
+       
+        # Add functions
+        self.add_function('reset')
+        self.add_function('get_all')
+        self.add_function('clear_waveforms')
+        self.add_function('load_waveform')
+        self.add_function('set_waveform')
+        self.add_function('set_ch1_waveform')
+        self.add_function('set_ch2_waveform')
+        
+    # Functions
+    def reset(self):
+        '''
+        Resets the instrument to default values
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.info(__name__ + ' : Resetting instrument')
+        self._visainstrument.write('*RST')
+
+    def get_all(self):
+        '''
+        Reads all implemented parameters from the instrument,
+        and updates the wrapper.
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.info(__name__ + ' : Reading all data from instrument')
+        logging.warning(__name__ + ' : get all not yet fully functional')
+
+        self.get_clock()
+
+        for i in range(1,3):
+            self.get('ch%d_amplitude' % i)
+            self.get('ch%d_offset' % i)
+            self.get('ch%d_frequency' % i)
+            self.get('ch%d_shape' % i)
+            self.get('ch%d_waveform_data' % i)
+            self.get('ch%d_polarity' % i)
+            self.get('ch%d_output' % i)
+            self.get('ch%d_polarity' % i)
+            self.get('ch%d_output_impedance' % i)
+            
+
+    def clear_waveforms(self):
+        '''
+        Clears the waveform on both channels.
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Clear waveforms from channels')
+        self._visainstrument.write('SOUR1:FUNC:USER ""')
+        self._visainstrument.write('SOUR2:FUNC:USER ""')
+
+   
+    def do_set_output(self, state, channel):
+        '''
+        This command sets the output state of the AFG3252.
+        Input:
+            channel (int) : the source channel
+            state (int) : on (1) or off (0)
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Set channel output state')
+        if (state == 1):
+            self._visainstrument.write('OUTP%s:STAT ON' % channel)
+        if (state == 0):
+            self._visainstrument.write('OUTP%s:STAT OFF' % channel)
+
+    def do_get_output(self, channel):
+        '''
+        This command gets the output state of the AWG.
+        Input:
+            channel (int) : the source channel
+
+        Output:
+            state (int) : on (1) or off (0)
+        '''
+        logging.debug(__name__ + ' : Get channel output state')
+        return self._visainstrument.ask('OUTP%s:STAT?' % channel)
+    
+
+    # Parameters
+    def do_get_clock(self):
+        '''
+        Returns the clockfrequency, which is the rate at which the datapoints are
+        sent to the designated output
+
+        Input:
+            None
+
+        Output:
+            clock (int) : frequency in Hz
+        '''
+        return self._clock
+
+    def do_set_clock(self, clock):
+        '''
+        Sets the rate at which the datapoints are sent to the designated output channel
+
+        Input:
+            clock (int) : frequency in Hz
+
+        Output:
+            None
+        '''
+        logging.warning(__name__ + ' : Clock set to %s. This is not fully functional yet. To avoid problems, it is better not to change the clock during operation' % clock)
+        self._clock = clock
+        self._visainstrument.write('SOUR:FREQ %f' % clock)
+
+
+
+    def do_get_amplitude(self, channel):
+        '''
+        Reads the amplitude of the designated channel from the instrument
+
+        Input:
+            channel (int) : 1 or 2, the number of the designated channel
+
+        Output:
+            amplitude (float) : the amplitude of the signal in Volts
+        '''
+        logging.debug(__name__ + ' : Get amplitude of channel %s from instrument'
+            % channel)
+        return float(self._visainstrument.ask('SOUR%s:VOLT:LEV:IMM:AMPL?' % channel))
+
+
+
+    def do_set_amplitude(self, amp, channel):
+        '''
+        Sets the amplitude of the designated channel of the instrument
+
+        Input:
+            amp (float)   : amplitude in Volts
+            channel (int) : 1 or 2, the number of the designated channel
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Set amplitude of channel %s to %.6f'
+            % (channel, amp))
+        self._visainstrument.write('SOUR%s:VOLT:LEV:IMM:AMPL %.6f' % (channel, amp))
+
+
+    def do_get_offset(self, channel):
+        '''
+        Reads the offset of the designated channel of the instrument
+
+        Input:
+            channel (int) : 1 or 2, the number of the designated channel
+
+        Output:
+            offset (float) : offset of designated channel in Volts
+        '''
+        logging.debug(__name__ + ' : Get offset of channel %s' % channel)
+        return float(self._visainstrument.ask('SOUR%s:VOLT:LEV:IMM:OFFS?' % channel))
+
+    def do_set_offset(self, offset, channel):
+        '''
+        Sets the offset of the designated channel of the instrument
+
+        Input:
+            offset (float) : offset in Volts
+            channel (int)  : 1 or 2, the number of the designated channel
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Set offset of channel %s to %.6f' % (channel, offset))
+        self._visainstrument.write('SOUR%s:VOLT:LEV:IMM:OFFS %.6f' % (channel, offset))
+
+
+    def do_get_frequency(self, channel):
+        '''
+        Reads the offset of the designated channel of the instrument
+
+        Input:
+            channel (int) : 1 or 2, the number of the designated channel
+
+        Output:
+            offset (float) : offset of designated channel in Volts
+        '''
+        logging.debug(__name__ + ' : Get offset of channel %s' % channel)
+        return float(self._visainstrument.ask('SOUR%s:FREQ?' % channel))
+
+    def do_set_frequency(self, frequency, channel):
+        '''
+        Sets the offset of the designated channel of the instrument
+
+        Input:
+            frequency (float) : frequency in Hz
+            channel (int)  : 1 or 2, the number of the designated channel
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Set offset of channel %s to %.6f' % (channel, frequency))
+        self._visainstrument.write('SOUR%s:FREQ %.6f' % (channel, frequency))
+
+
+
+    def do_get_output_impedance(self, channel):
+        '''
+        Reads the output impedance of channel 1 or 2.
+
+        Input:  None.
+
+        Output:
+            output impedance (float) : impedance in Ohm.
+        '''
+        logging.debug(__name__ + ' : Get offset of channel %s' % channel)
+        return float(self._visainstrument.ask('OUTP%s:IMP?' % channel))
+
+
+
+    def do_set_output_impedance(self, impedance, channel):
+        '''
+        Sets the output impedance of ch1 or ch2.
+
+        Input:
+            impedance (float) : output impedance in Ohm.
+            channel (int)  : 1 or 2, the number of the designated channel
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Set offset of channel %s to %.6f' % (channel, impedance))
+        self._visainstrument.write('OUTP%s:IMP %.6f' % (channel, impedance))
+
+
+
+
+
+
+
+
+
+    def do_get_shape(self,channel):
+        '''
+        Query the shape of the output waveform.
+
+        Output:
+            shape (string) : shape set on ch1 or ch2
+        '''
+        logging.debug(__name__ + ' : Get shape of channel %s' % channel)
+        return str(self._visainstrument.ask('SOUR%s:FUNC:SHAP?' % channel))
+
+    def do_get_waveform_data(self,channel):
+        '''
+        Copy the waveform data from channel (1,2) to EMEM and then download it so that it is saved in the parameters.  
+        Channel 1 always uses USER1 and channel 2 always uses USER2.
+        Output: Waveform data from ch1 (USER) and ch2 (USER2) are encoded in base64.
+        '''
+
+        # turn off all outputs
+        output = [0., 0.]
+        for ch in range(len(output)):
+          output[ch] = getattr(self, 'get_ch%u_output' % (1+ch))()
+          if output[ch] != 0.: getattr(self, 'set_ch%u_output' % (1+ch))(0.)
+
+        msg = 'TRAC:COPY EMEM,USER%u' % (channel)
+        self._visainstrument.write(msg)
+        data = self._visainstrument.ask('TRAC:DATA? EMEM')
+
+        # turn outputs back on (if they were on)
+        for ch,outp in enumerate(output):
+          #print "ch%u --> %.2f" % (ch, outp)
+          if output[ch] != 0.: getattr(self, 'set_ch%u_output' % (1+ch))(outp)
+
+        return base64.b64encode(data)
+
+    def do_set_shape(self, shape, channel):
+        '''
+        Set the shape of the output waveform.
+
+        Input:
+            shape (string)
+        '''
+        logging.debug(__name__ + ' : Set shape of channel %s' % channel)
+        self._visainstrument.write('SOUR%s:FUNC:SHAP %s' % (channel,shape))
+
+    def delete_waveform(self, memory):
+        '''
+        Deletes the contents of the spcified user waveform memory.
+        Input: memory.  Select intenal memory 1 - 4 to delete.
+        1 - USER1
+        2 - USER2
+        3 - USER3
+        4 - USER4
+        '''
+        self._visainstrument.write('TRACE:DEL:NAME USER%u' % memory)
+        
+    def reset_edit_memory(self,points=2000):
+        '''
+        Resets the contents of the edit memory.
+        Input:
+           points: number of points in the waveform in the edit memory (ranges from 2 to 131072).
+        
+        '''
+        self._visainstrument.write('TRACE:DEFINE EMEMORY,%u' % points)
+
+
+    def __waveform_to_byte_array(self,waveform, normalize_by_max_abs_val=False):
+        '''
+        Converts an array of real numbers between plus/minus one to a byte array
+        accepted by the AFG.
+
+        If normalize_by_max_abs_val is true, the waveform is normalized by the
+        maximum absolute value of the elements.
+        '''
+        
+        if normalize_by_max_abs_val:
+          wave = waveform #/ np.abs(waveform).max()
+        else:
+          wave = waveform
+
+        buf = bytearray(2*len(wave))
+        for i in range(len(wave)):
+          struct.pack_into('>H', buf, 2*i, int(np.round((1+wave[i]) * (2**13 - 1))))
+
+        return buf
+
+    def __byte_array_to_waveform(self, bytes):
+        '''
+        Converts an array of bytes (a string) queried from the AFG into a list
+        of real numbers between plus/minus one.
+        '''
+        assert bytes[0] == "#", "The first character must be a hash! (See AFG manual for the data format.)"
+        offset = 2 + int(bytes[1])
+        bytecount = int(bytes[2:offset])
+        fmt = '>%uH' % (bytecount/2)
+        data = bytes[offset:]
+        
+        if bytecount%2 != 0 or bytecount != len(data):
+          msg = 'WARN: wrong byte count (%u)! fmt: %s  len(data) = %u' % (bytecount, fmt, len(data))
+          raise Exception(msg)
+
+        return (np.array(struct.unpack(fmt, data)) - (2**13 - 1)) / (2**13 - 1.)
+
+    def waveform_data_to_waveform(self, waveform_data):
+        '''
+        Converts a base64 encoded array of bytes (a string)
+        obtained by get_ch1/2_waveform_data() into a list
+        of real numbers between plus/minus one.
+        '''
+        return self.__byte_array_to_waveform(base64.b64decode(waveform_data))
+
+    def load_waveform(self, waveform, normalize_by_max_abs_val = False, memory = 1):
+        '''
+        Initializes edit memory with the number of points in the waveform, deletes the USER# 
+        memory that will be used, loads the waveform to edit memory and then copies it to 
+        USER1, USER2, USER3 or USER4.
+
+        Input:
+              waveform (float) : wafeform data array
+            normalize_by_max_abs_val (bool): Normalize the waveform?  Default is False.
+            memory (int)  : 1 - USER1, 2 - USER2, 3 - USER3 or 4 - USER4.
+
+        Output:
+            None
+        '''
+
+        self.reset_edit_memory(len(waveform))
+        self.delete_waveform(memory)
+        buf = self.__waveform_to_byte_array(waveform, normalize_by_max_abs_val)
+        msg = 'TRACE:DATA EMEM,#%u%u%s' % (len(str(len(buf))), len(buf), str(buf))
+        self._visainstrument.write(msg)
+        
+        self._visainstrument.write('TRAC:COPY USER%s,EMEM' % memory)
+        
+########
+    def set_waveform(self, waveform, normalize_by_max_abs_val, memory):
+        '''
+        set the waveforms and save their data in the parameters after USER, USER2 have been loaded.
+
+        '''
+        self.load_waveform(waveform, normalize_by_max_abs_val, memory)
+        #    set the memory # = ch#
+        self.get('ch%s_waveform_data' % memory)
+
+    def set_ch1_waveform(self, waveform, normalize_by_max_abs_val=False):
+        self.set_waveform(waveform, normalize_by_max_abs_val, 1)
+        self.set_ch1_shape('USER1')
+
+    def set_ch2_waveform(self, waveform, normalize_by_max_abs_val=False):
+        self.set_waveform(waveform, normalize_by_max_abs_val, 2)
+        self.set_ch2_shape('USER2')
+
+##########
+
+    def do_get_polarity(self, channel):
+        '''
+        Gets the polarity of the designated channel.
+
+        Input:
+            None
+
+        Output:
+            channel (int) : NORMal or INVerted
+        '''
+        logging.debug(__name__ + ' : Get polarity of channel %s' % channel)
+        outp = self._visainstrument.ask('OUTP%s:POL?' % channel)
+        if (outp=='NORM'):
+            return 'normal'
+        elif (outp=='INV'):
+            return 'inverted'
+        else:
+            logging.debug(__name__ + ' : Read invalid status from instrument %s' % outp)
+            return 'an error occurred while reading status from instrument'
+
+    def do_set_polarity(self, state, channel):
+        '''
+        Sets the status of designated channel.
+
+        Input:
+            NORM for normal or INV for inverted polarity.
+
+        Output:
+            True or False.
+        '''
+        logging.debug(__name__ + ' : Set polarity of channel %s to %s' % (channel, state))
+       
+        if (state == 'NORM'):
+            self._visainstrument.write('OUTP%s:POL NORM' % channel)
+        if (state == 'INV'):
+            self._visainstrument.write('OUTP%s:POL INV' % channel)
+
+# self._visainstrument.write('OUTP%s:POL %s' % (channel, polarity))
+
+#            self._visainstrument.write('OUTP%s:POL INV' % channel)
+#           print 'Tried to set status to invalid value %s' % status
+
+
+    # #  Ask for string with filenames
+    # def get_filenames(self):
+    #     logging.debug(__name__ + ' : Read filenames from instrument')
+    #     return self._visainstrument.ask('MMEM:CAT? "MAIN"')
+
+
+
+
