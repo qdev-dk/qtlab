@@ -93,12 +93,9 @@ class Agilent_MSO9404A(Instrument):
                            format_map={"DC" : "DC coupling","DC50" : "DC 50 Ohm impedance",
                                      "AC" : "AC 1MOhm impedance", "LFR1" : "1 MOhm input impedance"})
 
-
         self.add_parameter('waveform_preamble',
             flags=Instrument.FLAG_GET,
                            type=types.DictionaryType)
-
-
 
         # triggering parameters
         self.add_parameter('trigger_mode',
@@ -135,7 +132,6 @@ class Agilent_MSO9404A(Instrument):
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, channels=(1, 4), units='current unit', minval=-0.8, maxval=0.8, 
                            type=types.FloatType, channel_prefix='ch%d_')
 
-
 ##----------------------------- edge trigger parameters p.839 --------------------
 
         self.add_parameter('edge_trigger_coupling',
@@ -167,7 +163,6 @@ class Agilent_MSO9404A(Instrument):
                                                               "SEGP" : "Peak Detect Segmented Mode",
                                                               "SEGH" : "High Resolution Segmented Mode"})
 
-
         self.add_parameter('waveform_source',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET,
                            type=types.StringType, format_map={"": "no arguement",
@@ -181,7 +176,6 @@ class Agilent_MSO9404A(Instrument):
                                                               "COMM2" : "common mode between 2,4",
                                                               "others.." : "see p. 1028"})                                                                                                                      
 
-
         self.add_parameter('acquire_average_count',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, minval=2, maxval=65534, type=types.IntType)
 
@@ -192,9 +186,6 @@ class Agilent_MSO9404A(Instrument):
 
         self.add_parameter('acquire_analog_points',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.StringType)
-
-
-
 
 #####  ---------------------------------
 
@@ -209,10 +200,9 @@ class Agilent_MSO9404A(Instrument):
         self.add_function('autoscale_vertical')
         self.add_function('digitize')
         self.add_function('get_waveform_as_words')
+        self.add_function('beep')
         
         
-        
-
         if (reset):
             self.reset()
         else:
@@ -234,6 +224,22 @@ class Agilent_MSO9404A(Instrument):
         '''
         logging.info(__name__ + ' : run continuously.')
         self._visainstrument.write(':RUN')
+
+
+    def beep(self):
+        '''
+        Beep tones.
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.info(__name__ + ' : Playing three beep tones.')
+        self._visainstrument.write(':BEEP 440,200')
+        self._visainstrument.write(':BEEP 392.00,200')
+        self._visainstrument.write(':BEEP 783.99,200')
 
 
 
@@ -328,7 +334,6 @@ class Agilent_MSO9404A(Instrument):
         return(self._visainstrument.ask(':WAVEFORM:DATA?'))
 
 
-
     def digitize(self,val):
         '''
         Initialize the selected channels or functions and acquire according to the current settings.
@@ -339,8 +344,24 @@ class Agilent_MSO9404A(Instrument):
         Output:
             None
         '''
-        logging.info(__name__ + ' : run continuously.')
+        logging.info(__name__ + ' : capturing data with Digitize.')
         self._visainstrument.write(':DIGITIZE %s' % val)
+
+
+    def set_display(self,val,channel):
+        '''
+        You can specify the display state of a channel.
+
+        Input:
+            val (int): Turn ON (1) or OFF (0) the display for the given channel
+            channel (int): Specify the channel [1,2,3,4].
+           
+        Output:
+            None
+        '''
+        logging.info(__name__ + ' : set display state of ch%u to %u.' % (channel,val)  )
+        self._visainstrument.write(':CHAN%u:DISP %s' % (channel,val))
+
 
 
     def do_get_waveform_preamble(self):
@@ -354,16 +375,44 @@ class Agilent_MSO9404A(Instrument):
             The waveform preamble parsed into a dict. Note that all values are left as strings.
         '''
         params = self._visainstrument.ask(':WAV:PRE?').split(',')
-        
+        assert len(params) == 24, "There is no waveform. Number of params in preamble (%d) should be 24!" % len(params)
+
+        # the order of the parameters is specified in the Programmer's Reference, p. 1020
+        # params1 =     {'format' : params[0],
+        #               'type' : params[1],
+        #                   'points': params[2],
+        #                   'count': params[3],
+        #                   'x_increment' : params[4],
+        #                   'x_origin' : params[5],
+        #                   'x_reference' : params[6],
+        #                   'y_increment' : params[7],
+        #                   'y_origin' : params[8],
+        #                   'y_reference' : params[9],
+        #                   'coupling' : params[10],
+        #                   'x_display_range' : params[11],
+        #                   'x_display_origin' : params[12], 
+        #                   'y_display_range' : params[13],
+        #                   'y_display_origin' : params[14],
+        #                   'date' : params[15],
+        #                   'time' : params[16],
+        #                   'frame_model_no' : params[17],
+        #                   'aquisition_mode' : params[18],
+        #                   'completion' : params[19],
+        #                   'x_units' : params[20],
+        #                   'y_units' : params[21],
+        #                   'max_bandwidth_limit' : params[22],
+        #                   'min_bandwidth_limit' : params[23]}
+
+
         # the order of the parameters is specified in the Programmer's Reference, p. 1020
         params = dict(zip(['format',
                           'type',
                           'points',
                           'count',
-                          'x_inrement',
+                          'x_increment',
                           'x_origin',
                           'x_reference',
-                          'y_inrement',
+                          'y_increment',
                           'y_origin',
                           'y_reference',
                           'coupling',
@@ -380,6 +429,7 @@ class Agilent_MSO9404A(Instrument):
                           'y_units',
                           'max_bandwidth_limit',
                           'min_bandwidth_limit' ], params))
+
 
         return params
 
@@ -447,30 +497,37 @@ class Agilent_MSO9404A(Instrument):
         vert_offset = self.get('ch%d_vertical_offset' % channel)
 
         self.digitize('CHAN%u' % channel)
-        
         dat = self.get_waveform_as_words()
-        pre = self.get_preamble()
+        pre = self.get_waveform_preamble()
 
         dat = self.__words_to_waveform(dat, pre)
+        time = self.get_time_axis()
+
 
         if turn_display_on:
           # turn the display back on
-          pass
+          self.set_display(1,channel)
 
+#        return pre, dat
         return pre, dat
-               
-#        self.autoscale()
+#       self.autoscale()
         
+
+
 
     def get_time_axis(self, preamble=None):
         '''
         Return a list of the time values from the waveform preamble data.
         If no preamble is provided, a new one is acquired from the scope.
         '''
-        pre = preamble if preamble != None else self.get_preamble()
-        
+        pre = preamble if preamble != None else self.get_waveform_preamble()
+
         # generate the time points from the information in the preamble
-        return np.array()
+        xorg = np.float(pre['x_origin'])
+        xinc = np.float(pre['x_increment'])
+        points = np.int(pre['points'])
+
+        return np.array([(xorg + i*xinc) for i in range(points)])
 
 
     def __words_to_waveform(self, bytes, preamble=None):
@@ -492,37 +549,68 @@ class Agilent_MSO9404A(Instrument):
         integer_data = np.array(struct.unpack(fmt, data))
 
         # convert the integers into floats in the plus (exclusive) / minus (inclusive) one range
-        float_data = integer_data / float(2**15)
+        # float_data = integer_data / float(2**15)
+
+        # convert the integers to voltages using parameters from the preamble
+        pre = preamble if preamble != None else self.get_waveform_preamble()  
+            
+        yinc = np.float(pre['y_increment'])
+        yorg = np.float(pre['y_origin'])
+        voltages = np.array([(yorg + integer_data[i]*yinc) for i in range(0,len(integer_data))])
+        
+        # This magic value indicates that the scope has not
+        # acquired enough data to assign a value for this point
+        voltages[integer_data == 31232] = np.NaN
+
 
         # This magic value indicates that the scope has not
         # acquired enough data to assign a value for this point
-        float_data[integer_data == 31232] = np.NaN
+        #float_data[integer_data == 31232] = np.NaN
 
-        if preamble != None:
-          # Convert into physical units (scale, offset) if preamble was provided
-          pass
+        # if preamble != None:
         
-        return float_data
+        # Convert into physical units (scale, offset) if preamble was provided
+        return voltages
+#       pass
+        
+#       return float_data
 
-    def arm(self, trigger_source_channel=4, trigger_level=0.1):
-        '''
+
+    def single_with_edge_trigger(self,
+                                 trigger_source_channel=4,
+                                 trigger_level=0.1,
+                                 trigger_on_positive_slope=True):
+        #### fix edge trigger source issue!  #########
+
+       '''
           Wait for a single edge trigger event on channel 2, then do a single aquisition.
+          You can override the default trigger options using the parameters. If you set
+          them to None, the current parameters are used.
 
         Input:
             trigger_level(float): Positive slope edge trigger level to set on channel 2.
         Output:
             none.
         '''
-        assert (trigger_source_channel in [1, 2, 3, 4]), 'Invalid trigger source channel!'
+#       assert (trigger_source_channel in [1, 2, 3, 4]), 'Invalid trigger source channel!'
+       self.set_trigger_sweep_mode('SING')
 
-        self.set_trigger_sweep_mode('SING')
-        getattr(self, 'set_ch%u_trigger_level' % trigger_source_channel)(trigger_level) 
-        self.set_trigger_mode('EDGE')
-        self.set_edge_trigger_source('CHAN2')
-        self.set_edge_trigger_coupling('DC')
-        self.set_edge_trigger_slope('POS')
-        self.single()
+       if trigger_level != None:
+         getattr(self, 'set_ch%u_trigger_level' % trigger_source_channel)(trigger_level)
 
+       self.set_trigger_mode('EDGE')
+
+       if trigger_source_channel != None:
+         self.set_edge_trigger_source('CHAN%u' % trigger_source_channel)
+       
+       self.set_edge_trigger_coupling('DC')
+
+       if trigger_on_positive_slope != None:
+         self.set_edge_trigger_slope('POS')
+       else:
+         self.set_edge_trigger_slope('NEG')
+
+       self.single()
 
 ## begin the parameter functions    
     def do_get_acquire_average_mode(self): 
