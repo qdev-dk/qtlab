@@ -48,9 +48,16 @@ class Agilent_MSO9404A(Instrument):
         self._address = address
         self._visainstrument = visa.instrument(self._address, timeout=30) # timeout is in seconds
 
-        # Tell the instrument not to repeat the command in the responses
+        # Tell the instrument not to repeat the command in the responses. We assume this everywhere.
         self._visainstrument.write(':SYST:HEAD 0')
+        
+        # we assume most-significant-byte-first WORDs in __words_to_waveform()
+        self._visainstrument.write(':WAVEFORM:FORMAT WORD')
+        self._visainstrument.write(':WAV:BYT MSBF')
 
+        # This is important for get_waveform() to actually return what we see on the screen
+        self._visainstrument.write(':WAVEFORM:VIEW WIND')
+        
         # Timebase parameters 
         self.add_parameter('timebase_range',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='s', minval=5E-11, maxval=20, type=types.FloatType)
@@ -60,14 +67,20 @@ class Agilent_MSO9404A(Instrument):
 
         self.add_parameter('timebase_delay',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='s', minval=0., maxval=10., type=types.FloatType)
-        
+
+        self.add_parameter('timebase_position',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='s', minval=0., maxval=20., type=types.FloatType)
+
         self.add_parameter('timebase_reference',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.StringType, 
                            format_map={"LEFT" : "left","CENT" : "center","RIGH" : "right"})
+                           
+        self.add_parameter('timebase_ref_clock_mode',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.StringType)                  
 
         # 'Channel' parameters 
         self.add_parameter('vertical_range',
-            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, channels=(1, 4), units='unit', minval=0.001, maxval=8, 
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, channels=(1, 4), units='unit', minval=0.001, maxval=10., 
                            type=types.FloatType, channel_prefix='ch%d_')
 
         self.add_parameter('vertical_scale',
@@ -159,6 +172,7 @@ class Agilent_MSO9404A(Instrument):
                            type=types.StringType, format_map={"ETIM" : "Equivalent Time",
                                                               "RTIM" : "Real Time", 
                                                               "PDET" : "Real Time Peak Detect", 
+                                                              "HRES" : "High Resolution Real Time", 
                                                               "SEGM" : "Segmented", 
                                                               "SEGP" : "Peak Detect Segmented Mode",
                                                               "SEGH" : "High Resolution Segmented Mode"})
@@ -184,8 +198,8 @@ class Agilent_MSO9404A(Instrument):
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.StringType)
 
 
-        self.add_parameter('acquire_analog_points',
-            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.StringType)
+        self.add_parameter('acquire_points',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.IntType)
 
 #####  ---------------------------------
 
@@ -214,7 +228,7 @@ class Agilent_MSO9404A(Instrument):
 
     def run(self):
         '''
-        Resets the instrument to default values
+        Run continuously.
 
         Input:
             None
@@ -286,9 +300,61 @@ class Agilent_MSO9404A(Instrument):
         self.get_all()
 
 
+
+    def operation_complete_query(self):
+        '''
+        The *OPC? query places an ASCII character "1" in the oscilloscope's output
+        queue when all pending selected device operations have finished.
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.info(__name__ + ' : asking operation complete status.')
+        return self._visainstrument.ask('*OPC?')
+
+
+
+    def trigger_event_register(self):
+        '''
+        
+        The :TER? query reads the Trigger Event Register. A "1" is returned if a
+        trigger has occurred. A "0" is returned if a trigger has not occurred. The
+        autotrigger does not set this register. The register is set to a value of 1
+        only when the waveform meets the trigger criteria.
+        
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.info(__name__ + ' : trigger event register query.')
+        return self._visainstrument.ask('TER?')
+
+
+    def clear(self):
+        '''
+        The *CLS command clears all status and error registers.
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.info(__name__ + ' : clearing status and event registers')
+        self._visainstrument.write('*CLS')
+        self.get_all()
+
+
+
+
     def autoscale(self):
         '''
-        Resets the instrument to default values
+        Autoscale all axis.
 
         Input:
             None
@@ -300,9 +366,9 @@ class Agilent_MSO9404A(Instrument):
         self._visainstrument.write(':AUTOSCALE')
 
 
-    def autoscale_vertical(self,channel):
+    def autoscale_vertical(self, channel):
         '''
-        Resets the instrument to default values
+        Autoscale the vertical axis for the given channel.
 
         Input:
             channel (string): CHAN1, CHAN2, CHAN3, CHAN4
@@ -328,13 +394,11 @@ class Agilent_MSO9404A(Instrument):
             output format(string): current output format which can be ASCii, BINary, BYTE or WORD.  See p. 1017.
         '''
 
-        # we assume most-significant-byte-first WORDs in __words_to_waveform()
-        self._visainstrument.write(':WAVEFORM:FORMAT WORD')
-        self._visainstrument.write(':WAV:BYT MSBF')
         return(self._visainstrument.ask(':WAVEFORM:DATA?'))
+        #return(self._visainstrument.ask(':WAVEFORM:DATA? 1,%u' % self.get_acquire_points()))
 
 
-    def digitize(self,val):
+    def digitize(self, channel=None):
         '''
         Initialize the selected channels or functions and acquire according to the current settings.
 
@@ -344,8 +408,8 @@ class Agilent_MSO9404A(Instrument):
         Output:
             None
         '''
-        logging.info(__name__ + ' : capturing data with Digitize.')
-        self._visainstrument.write(':DIGITIZE %s' % val)
+        logging.debug(__name__ + ' : capturing data with Digitize on channel %s.' % (str(channel)))
+        self._visainstrument.write(':DIGITIZE %s' % channel if channel != None else ':DIG')
 
 
     def set_display(self,val,channel):
@@ -434,6 +498,27 @@ class Agilent_MSO9404A(Instrument):
         return params
 
 
+    def get_waveform_count(self): 
+        '''
+        Returns the fewest number of hits in all of the time buckets
+        for the currently selected waveform.
+        
+        For the AVERage waveform type, the count value is the fewest
+        number of hits for all time buckets. This value may be less
+        than or equal to the value specified with the
+        :ACQuire:AVERage:COUNt command.
+
+        Input:
+            none
+        Output:
+            completion % before measuring (float): see p. 147 of the programming manual.
+        '''
+        outp = self._visainstrument.ask(':WAVEFORM:COUNT?')
+        logging.debug(__name__ + ' : Getting waveform count (number of averages completed): %s' + outp)
+        return(int(outp))
+
+
+
 
     def get_completion_criterion(self): 
         '''
@@ -463,11 +548,11 @@ class Agilent_MSO9404A(Instrument):
 
 
 
-    def get_waveform(self, channel=1, turn_display_on=True):
+    def get_waveform(self, channel=None, completion_criterion=None, turn_display_on=True):
         '''
         Acquires the waveform on the screen.
         
-        Input: channel number (int): 1,2,3,4
+        Input: channel: CHAN1, CHAN2, CHAN3, CHAN4, DIFF...
         Output: data in WORD format        
        
         1 - system header off
@@ -485,18 +570,17 @@ class Agilent_MSO9404A(Instrument):
         Output:
             status(string): ON or OFF.
         '''
-        self.set_acquire_mode('RTIM')
-        self.set_completion_criterion(100)
-        self.set_waveform_source('CHAN%u' % channel)
+        #self.set_acquire_mode('HRES')
+        
+        #if completion_criterion != None:
+        #  self.set_completion_criterion(completion_criterion)
 
-        # Number of points
-        self.set_acquire_analog_points('AUTO')
+        #if channel != None:
+        #  self.set_waveform_source(channel)
         
         # Digitize uses the ACQUIRE subsystem (p.74)
-        full_range = self.get('ch%d_vertical_range' % channel)
-        vert_offset = self.get('ch%d_vertical_offset' % channel)
-
-        self.digitize('CHAN%u' % channel)
+        #self.digitize('CHAN%u' % channel)
+        #self.digitize()
         dat = self.get_waveform_as_words()
         pre = self.get_waveform_preamble()
 
@@ -504,9 +588,9 @@ class Agilent_MSO9404A(Instrument):
         time = self.get_time_axis()
 
 
-        if turn_display_on:
-          # turn the display back on
-          self.set_display(1,channel)
+        #if turn_display_on:
+        #  # turn the display back on
+        #  self.set_display(1,channel)
 
 #        return pre, dat
         return pre, dat
@@ -514,8 +598,7 @@ class Agilent_MSO9404A(Instrument):
         
 
 
-
-    def get_time_axis(self, preamble=None):
+    def get_time_axis(self, preamble=None, waveform=None):
         '''
         Return a list of the time values from the waveform preamble data.
         If no preamble is provided, a new one is acquired from the scope.
@@ -523,9 +606,9 @@ class Agilent_MSO9404A(Instrument):
         pre = preamble if preamble != None else self.get_waveform_preamble()
 
         # generate the time points from the information in the preamble
-        xorg = np.float(pre['x_origin'])
-        xinc = np.float(pre['x_increment'])
-        points = np.int(pre['points'])
+        xorg = float(pre['x_origin'])
+        xinc = float(pre['x_increment'])
+        points = len(waveform) if waveform != None else int(pre['points'])
 
         return np.array([(xorg + i*xinc) for i in range(points)])
 
@@ -575,44 +658,83 @@ class Agilent_MSO9404A(Instrument):
         
 #       return float_data
 
+    def restart_averaging(self):
+      # reset the number of averages
+      self.set_acquire_average_mode('OFF')
+      self.set_acquire_average_mode('ON')
 
-    def single_with_edge_trigger(self,
+
+    def setup_edge_trigger(self,
                                  trigger_source_channel=4,
-                                 trigger_level=0.1,
+                                 trigger_level=0.2,
                                  trigger_on_positive_slope=True):
         #### fix edge trigger source issue!  #########
 
-       '''
-          Wait for a single edge trigger event on channel 2, then do a single aquisition.
-          You can override the default trigger options using the parameters. If you set
-          them to None, the current parameters are used.
+        '''
+           Wait for a single edge trigger event on channel 2, then do a single aquisition.
+           You can override the default trigger options using the parameters. If you set
+           them to None, the current parameters are used.
+           
+         Input:
+             trigger_level(float): Positive slope edge trigger level to set on channel 2.
+         Output:
+             none.
+         '''
+#       assert (trigger_source_channel in [1, 2, 3, 4]), 'Invalid trigger source channel!'
+        self.set_trigger_sweep_mode('TRIG')
+        #self.set_trigger_sweep_mode('SING')
+
+        if trigger_level != None:
+          getattr(self, 'set_ch%u_trigger_level' % trigger_source_channel)(trigger_level)
+
+        self.set_trigger_mode('EDGE')
+
+        if trigger_source_channel != None:
+          self.set_edge_trigger_source('CHAN%u' % trigger_source_channel)
+        
+        self.set_edge_trigger_coupling('DC')
+
+        if trigger_on_positive_slope != None:
+          self.set_edge_trigger_slope('POS')
+        else:
+          self.set_edge_trigger_slope('NEG')
+        
+        #self.run()
+
+## begin the parameter functions
+
+    def do_get_timebase_ref_clock_mode(self): 
+        '''
+        Query whether averaging mode is ON or OFF.
 
         Input:
-            trigger_level(float): Positive slope edge trigger level to set on channel 2.
+            none
         Output:
-            none.
+            status(string): ON or OFF.
         '''
-#       assert (trigger_source_channel in [1, 2, 3, 4]), 'Invalid trigger source channel!'
-       self.set_trigger_sweep_mode('SING')
+        logging.debug(__name__ + ' Getting status of external reference clock: ')
+        outp = self._visainstrument.ask(':TIMEBASE:REFCLOCK?')
+        if outp=='1':
+            return('EXT')
+        elif outp=='0':
+            return('INT')
+        else:
+            return(np.NaN)
+    
+    
+    def do_set_timebase_ref_clock_mode(self, val):
+        '''
 
-       if trigger_level != None:
-         getattr(self, 'set_ch%u_trigger_level' % trigger_source_channel)(trigger_level)
+        Input:
+            val (int) : external reference clock EXT(1) or INT(0).
 
-       self.set_trigger_mode('EDGE')
+        Output:
+            True or false.
+        '''
+        logging.debug(__name__ + ' : Setting status of external reference clock:  %s' % val)
+        self._visainstrument.write(':TIMEBASE:REFCLOCK %s' % val)
 
-       if trigger_source_channel != None:
-         self.set_edge_trigger_source('CHAN%u' % trigger_source_channel)
-       
-       self.set_edge_trigger_coupling('DC')
-
-       if trigger_on_positive_slope != None:
-         self.set_edge_trigger_slope('POS')
-       else:
-         self.set_edge_trigger_slope('NEG')
-
-       self.single()
-
-## begin the parameter functions    
+    
     def do_get_acquire_average_mode(self): 
         '''
         Query whether averaging mode is ON or OFF.
@@ -674,7 +796,7 @@ class Agilent_MSO9404A(Instrument):
 
 
 
-    def do_get_acquire_analog_points(self): 
+    def do_get_acquire_points(self): 
         '''
         Query the averaging count.
 
@@ -683,12 +805,12 @@ class Agilent_MSO9404A(Instrument):
         Output:
             count(int): number of averages per time bucket (p.145)
         '''
-        logging.debug(__name__ + ' : Getting acquisition sampling mode.')
-        outp = self._visainstrument.ask(':ACQUIRE:POINTS:ANALOG?')
-        return(outp)
+        logging.debug(__name__ + ' : Getting number of acquired points.')
+        outp = self._visainstrument.ask(':ACQUIRE:POINTS?')
+        return(int(outp))
 
 
-    def do_set_acquire_analog_points(self, val='AUTO'):
+    def do_set_acquire_points(self, val='AUTO'):
         '''
 
         Input:
@@ -697,10 +819,14 @@ class Agilent_MSO9404A(Instrument):
         Output:
             True or false.
         '''
-        logging.debug(__name__ + ' : # of acquisition points set to %s' % val)
-        self._visainstrument.write(':ACQUIRE:POINTS:ANALOG %s' % val)
-
-
+        logging.debug(__name__ + ' : number of acquired points set to %s' % val)
+        self._visainstrument.write(':ACQUIRE:SRATE:AUTO 1')
+        
+        if val == 'AUTO':
+          self._visainstrument.write(':ACQUIRE:POINTS:AUTO 1')
+        else:
+          self._visainstrument.write(':ACQUIRE:POINTS:AUTO 0')
+          self._visainstrument.write(':ACQUIRE:POINTS %s' % val)
 
     def do_get_acquire_mode(self): 
         '''
@@ -753,10 +879,41 @@ class Agilent_MSO9404A(Instrument):
         Output:
             True or false.
         '''
-        logging.debug(__name__ + ' : set timebase scale to %s' % val)
+        logging.debug(__name__ + ' : set wavform source for digitize to %s' % val)
         self._visainstrument.write(':WAVEFORM:SOURCE %s' % val)
 
 ####
+
+
+
+
+    def do_get_timebase_position(self): 
+        '''
+        This command sets the time interval between the trigger event
+        and the delay reference point.  
+        Input: none 
+        Output: Timebase position (s).
+        '''
+        logging.debug(__name__ + ' : getting the timebase range')
+        p = self._visainstrument.ask(':TIMEBASE:POSITION?')
+        try:
+            return float(p)
+        except ValueError:
+            print "Could not convert {0} to float.".format(p)
+            return float('nan')
+
+
+    def do_set_timebase_position(self, val):
+        '''
+
+        Input:
+            len (float) : Timebase position (s)
+
+        Output:
+            True or false.
+        '''
+        logging.debug(__name__ + ' : set timebase range to %f' % val)
+        self._visainstrument.write(':TIMEBASE:POSITION %s' % val)
 
 
 
@@ -788,6 +945,10 @@ class Agilent_MSO9404A(Instrument):
         '''
         logging.debug(__name__ + ' : set timebase range to %f' % val)
         self._visainstrument.write(':TIMEBASE:RANGE %s' % val)
+
+
+
+
 
 
     def do_get_timebase_scale(self): 
@@ -977,6 +1138,39 @@ class Agilent_MSO9404A(Instrument):
         '''
         logging.debug(__name__ + ' : set timebase scale to %s' % val)
         self._visainstrument.write(':CHAN%u:SCAL %s' % (channel,val))
+
+
+
+
+    def do_get_vertical_scale(self,channel):
+        '''
+        Input:
+            none
+
+        Output (float):
+            Units per division for vertical scale (units/div)
+        '''
+        p = self._visainstrument.ask(':CHAN%u:SCAL?' % channel)
+        try:
+            return float(p)
+        except ValueError:
+            print "Could not convert {0} to float.".format(p)
+            return float('nan')
+
+
+    def do_set_vertical_scale(self,val, channel):
+        '''
+
+        Input:
+            val (string) : Units per division for vertical scale.
+            channel (int): channel to set
+
+        Output:
+            True or false.
+        '''
+        logging.debug(__name__ + ' : set timebase scale to %s' % val)
+        self._visainstrument.write(':CHAN%u:SCAL %s' % (channel,val))
+
 
 
 
@@ -1315,7 +1509,7 @@ class Agilent_MSO9404A(Instrument):
         self.get_waveform_source()
         self.get_acquire_average_mode()
         self.get_acquire_average_count()
-        self.get_acquire_analog_points()
+        self.get_acquire_points()
 
         for i in range(1,5):
             self.get('ch%d_vertical_range' % i)
