@@ -77,6 +77,11 @@ class Tektronix_AFG3252(Instrument):
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
             channels=(1, 2), channel_prefix='ch%d_')
 
+        self.add_parameter('ref_clock_mode',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.StringType, format_map = {
+                "INT" : "internal",
+                "EXT" : "external"}) 
+            
         self.add_parameter('clock', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
             minval=1e6, maxval=1e9, units='Hz')
@@ -96,6 +101,10 @@ class Tektronix_AFG3252(Instrument):
         self.add_parameter('output_impedance', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
             channels=(1, 2), minval=1, maxval=1E4, units='Ohm', channel_prefix='ch%d_')
+
+        self.add_parameter('phase', type=types.FloatType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            channels=(1, 2), minval=0, maxval=6.283, units='rad', channel_prefix='ch%d_')
 
         self.add_parameter('shape', type=types.StringType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
@@ -126,6 +135,9 @@ class Tektronix_AFG3252(Instrument):
         self.add_parameter('polarity', type=types.StringType, flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET, channels=(1, 2),channel_prefix='ch%d_', format_map={"INV" : "inverted","NORM" : "normal"}
 )
 
+      
+
+
        
         # Add functions
         self.add_function('reset')
@@ -135,7 +147,7 @@ class Tektronix_AFG3252(Instrument):
         self.add_function('set_waveform')
         self.add_function('set_ch1_waveform')
         self.add_function('set_ch2_waveform')
-        
+        self.add_function('phase_sync')
     # Functions
     def reset(self):
         '''
@@ -176,7 +188,7 @@ class Tektronix_AFG3252(Instrument):
             self.get('ch%d_output' % i)
             self.get('ch%d_polarity' % i)
             self.get('ch%d_output_impedance' % i)
-            
+            self.get('ch%d_phase' % i)
 
     def clear_waveforms(self):
         '''
@@ -191,6 +203,22 @@ class Tektronix_AFG3252(Instrument):
         logging.debug(__name__ + ' : Clear waveforms from channels')
         self._visainstrument.write('SOUR1:FUNC:USER ""')
         self._visainstrument.write('SOUR2:FUNC:USER ""')
+
+
+    def phase_sync(self):
+        '''
+        Syncs the phases of ch1 and ch2.  Set the phase with the 'phase' parameter.
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Synchronizing the phase of CH1 and CH2.')
+        self._visainstrument.write('SOUR1:PHASE:INITIATE')
+
+
 
    
     def do_set_output(self, state, channel):
@@ -284,6 +312,39 @@ class Tektronix_AFG3252(Instrument):
         self._visainstrument.write('SOUR%s:VOLT:LEV:IMM:AMPL %.6f' % (channel, amp))
 
 
+    def do_get_phase(self, channel):
+        '''
+        Reads the amplitude of the designated channel from the instrument
+
+        Input:
+            channel (int) : 1 or 2, the number of the designated channel
+
+        Output:
+            amplitude (float) : the amplitude of the signal in Volts
+        '''
+        logging.debug(__name__ + ' : Get amplitude of channel %s from instrument'
+            % channel)
+        return float(self._visainstrument.ask('SOURCE%s:PHASE:ADJUST?' % channel))
+
+
+
+    def do_set_phase(self, phase, channel):
+        '''
+        Sets the phase of the designated channel of the instrument.
+
+        Input:
+            amp (float)   : phase in rad.
+            channel (int) : 1 or 2, the number of the designated channel
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Set phase of channel %s to %.6f rad.'
+            % (channel, amp))
+        self._visainstrument.write('SOURCE%s:PHASE:ADJUST %.6f' % (channel, amp))
+
+
+
     def do_get_offset(self, channel):
         '''
         Reads the offset of the designated channel of the instrument
@@ -372,11 +433,6 @@ class Tektronix_AFG3252(Instrument):
 
 
 
-
-
-
-
-
     def do_get_shape(self,channel):
         '''
         Query the shape of the output waveform.
@@ -387,6 +443,28 @@ class Tektronix_AFG3252(Instrument):
         logging.debug(__name__ + ' : Get shape of channel %s' % channel)
         return str(self._visainstrument.ask('SOUR%s:FUNC:SHAP?' % channel))
 
+        
+    def do_get_ref_clock_mode(self):
+        '''
+        Query the reference clock mode.
+
+        Output:
+            mode (string) : INTernal or EXTernal
+        '''
+        logging.debug(__name__ + ' : Get the reference clock mode.')
+        return str(self._visainstrument.ask(':ROSCillator:SOURce?'))    
+        
+    def do_set_ref_clock_mode(self,val):
+        '''
+        Set the reference clock mode(INT or EXT).
+
+        Input:
+            mode(string): see context help. 
+        '''
+        logging.debug(__name__ + ' : Set the reference clock mode. %s' % val)
+        self._visainstrument.write(':ROSC:SOUR %s' % val)    
+        
+        
     def do_get_waveform_data(self,channel):
         '''
         Copy the waveform data from channel (1,2) to EMEM and then download it so that it is saved in the parameters.  
@@ -494,13 +572,15 @@ class Tektronix_AFG3252(Instrument):
         USER1, USER2, USER3 or USER4.
 
         Input:
-              waveform (float) : wafeform data array
+              waveform (float) : wafeform data array (length between 2 and 131072)
             normalize_by_max_abs_val (bool): Normalize the waveform?  Default is False.
             memory (int)  : 1 - USER1, 2 - USER2, 3 - USER3 or 4 - USER4.
 
         Output:
             None
         '''
+        
+        assert (len(waveform) >= 2 and len(waveform) <= 131072), "Waveform length out of range."
 
         self.reset_edit_memory(len(waveform))
         self.delete_waveform(memory)
@@ -513,8 +593,10 @@ class Tektronix_AFG3252(Instrument):
 ########
     def set_waveform(self, waveform, normalize_by_max_abs_val, memory):
         '''
-        set the waveforms and save their data in the parameters after USER, USER2 have been loaded.
-
+        Load the specified waveform (array of floats between plus/minus one)
+        and update the waveform_data parameter.
+        
+        Length of the waveform must be between 2 and 131072.
         '''
         self.load_waveform(waveform, normalize_by_max_abs_val, memory)
         #    set the memory # = ch#
