@@ -234,35 +234,32 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting temperature for channel {0} at t = {1}'.format(channel, str(t)))
         
         def load_temperature_data(address, t):
-	  # load the data from the preceding and following days as well
-	  all_data = None
-	  for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
+          # load the data from the preceding and following days as well
+          all_data = None
+          for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
             datestr = self.__time_to_datestr(tt)
             fname = os.path.join(self._address, datestr, 'CH{0} T {1}.log'.format(channel, datestr))
 
-	    try:
-	      logging.debug('Loading temperature data for %s.' % str(tt))
+            try:
+              logging.debug('Loading temperature data for %s.' % str(tt))
               data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'temperature'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
               # convert the date & time strings to a datetime object
               data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
-	      if all_data == None:
-	        all_data = data
-	      else:
-		all_data = np.concatenate((all_data, data), axis=0)
-	       
+              if all_data == None:
+                all_data = data
+              else:
+                all_data = np.concatenate((all_data, data), axis=0)
+               
             except Exception as e:
-	      logging.debug('Failed to load temperature data for %s. (Normal if in the future.)' % str(tt))
+              logging.debug('Failed to load temperature data for %s. (Normal if in the future.)' % str(tt))
               pass
 
-	    if all_data == None:
-	      msg = 'WARN: No temperature data loaded for t = %s.' % str(t)
-	      logging.info(msg)
-	      raise Exception(msg)
+          if all_data == None:
+            msg = 'WARN: No temperature data loaded for t = %s.' % str(t)
+            logging.info(msg)
+            raise Exception(msg)
 
-		
-	  return all_data
-		
-
+          return all_data
 
 
         return self.__interpolate_value_at_time(load_temperature_data, t)
@@ -282,29 +279,29 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting resistance for channel {0} at t = {1}'.format(channel, str(t)))
         
         def load_resistance_data(address, t):
-	  # load the data from the preceding and following days as well
-	  all_data = None
-	  for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
+          # load the data from the preceding and following days as well
+          all_data = None
+          for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
             datestr = self.__time_to_datestr(tt)
             fname = os.path.join(self._address, datestr, 'CH{0} R {1}.log'.format(channel, datestr))
             try:
-               data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'resistance'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
-               # convert the date & time strings to a datetime object
-               data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
-	       if all_data == None:
-	         all_data = data
-	       else:
-		 all_data = np.concatenate((all_data, data), axis=0)
-	       
+              data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'resistance'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
+              # convert the date & time strings to a datetime object
+              data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
+              if all_data == None:
+                all_data = data
+              else:
+                all_data = np.concatenate((all_data, data), axis=0)
             except Exception as e:
-               pass
+              logging.debug('Failed to load resistance data for %s. (Normal if in the future.)' % str(tt))
+              pass
 
-	    if all_data == None:
-	      msg = 'WARN: No resistance data loaded for t = %s.' % str(t)
-	      logging.info(msg)
-	      raise Exception(msg)
+          if all_data == None:
+            msg = 'WARN: No resistance data loaded for t = %s.' % str(t)
+            logging.info(msg)
+            raise Exception(msg)
 
-	  return all_data
+          return all_data
 
         return self.__interpolate_value_at_time(load_resistance_data, t)
 
@@ -323,9 +320,9 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting pressure for channel {0} at t = {1}'.format(channel, str(t)))
         
         def load_pressure_data(address, t):
-	  # load the data from the preceding and following days as well
-	  all_data = None
-	  for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
+          # load the data from the preceding and following days as well
+          all_data = None
+          for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
             datestr = self.__time_to_datestr(tt)
             fname = os.path.join(self._address, datestr, 'Maxigauge {0}.log'.format(datestr))
             try:
@@ -334,20 +331,20 @@ class bluefors_log_reader(Instrument):
               # and convert the date & time strings to a datetime object
               data = [ [datetime.datetime(int('20'+d[0][6:8]), int(d[0][3:5]), int(d[0][0:2]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()),
                           d[2] if d[3]==0 else float('nan')] for d in data ]
-	      if all_data == None:
-	        all_data = data
-	      else:
-		all_data = np.concatenate((all_data, data), axis=0)
-	       
+              if all_data == None:
+                all_data = data
+              else:
+                all_data = np.concatenate((all_data, data), axis=0)
             except Exception as e:
+              logging.debug('Failed to load pressure data for %s. (Normal if in the future.)' % str(tt))
               pass
 
-	    if all_data == None:
-	      msg = 'WARN: No pressure data loaded for t = %s.' % str(t)
-	      logging.info(msg)
-	      raise Exception(msg)
+          if all_data == None:
+            msg = 'WARN: No pressure data loaded for t = %s.' % str(t)
+            logging.info(msg)
+            raise Exception(msg)
 
-	  return all_data
+          return all_data
 
 	
         return self.__interpolate_value_at_time(load_pressure_data, t)
@@ -366,31 +363,29 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting flow at t = {0}'.format(str(t)))
         
         def load_flow_data(address, t):
-	  # load the data from the preceding and following days as well
-	  all_data = None
-	  for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
+          # load the data from the preceding and following days as well
+          all_data = None
+          for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
             datestr = self.__time_to_datestr(tt)
             fname = os.path.join(self._address, datestr, 'Flowmeter {0}.log'.format(datestr))
             try:
               data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'flow'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
               # convert the date & time strings to a datetime object
               data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
-	      if all_data == None:
-	        all_data = data
-	      else:
-		all_data = np.concatenate((all_data, data), axis=0)
-	       
+              if all_data == None:
+                all_data = data
+              else:
+                all_data = np.concatenate((all_data, data), axis=0)
             except Exception as e:
+              logging.debug('Failed to load flow data for %s. (Normal if in the future.)' % str(tt))
               pass
 
-	    if all_data == None:
-	      msg = 'WARN: No flow data loaded for t = %s.' % str(t)
-	      logging.info(msg)
-	      raise Exception(msg)
-
-		
-	  return all_data
-                
+          if all_data == None:
+            msg = 'WARN: No flow data loaded for t = %s.' % str(t)
+            logging.info(msg)
+            raise Exception(msg)
+        
+          return all_data
 
         return self.__interpolate_value_at_time(load_flow_data, t)
 
