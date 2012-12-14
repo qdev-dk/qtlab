@@ -17,10 +17,13 @@
 
 from instrument import Instrument
 import visa
+from visa import VisaIOError
 import types
 import logging
 import numpy as np
 import struct
+import time
+import qt
 
 class Agilent_N9928A(Instrument):
     '''
@@ -44,7 +47,7 @@ class Agilent_N9928A(Instrument):
 
         # Add some global constants
         self._address = address
-        self._visainstrument = visa.instrument(self._address)
+        self._visainstrument = visa.instrument(self._address, timeout=30) # timeout is in seconds
 
         # parameters 
         self.add_parameter('operating_mode',
@@ -76,12 +79,25 @@ class Agilent_N9928A(Instrument):
         self.add_parameter('sweep_mode', type=types.StringType,
                            flags=Instrument.FLAG_GETSET)
 
+        self.add_parameter('velocity_factor', type=types.FloatType, minval=0, maxval=1,
+                           flags=Instrument.FLAG_GETSET)
+                           
+        self.add_parameter('source_power', type=types.FloatType, minval=-45, maxval=0, units='dBm',
+                           flags=Instrument.FLAG_GETSET)
+                                              
         self.add_parameter('average_mode',
             flags=Instrument.FLAG_GETSET, type=types.StringType, 
                            format_map={"SWEep" : "sweep",
                                        "POINT" : "point"}
                            )
 
+        self.add_parameter('source_power_mode',
+            flags=Instrument.FLAG_GETSET, type=types.StringType, 
+                           format_map={"HIGH" : "highest flat power level",
+                                       "LOW" : "low flat power level",
+                                       "MAN" : "manual setting"}
+                           )                   
+                           
         self.add_parameter('smoothing_mode',
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET, type=types.StringType, 
                            channels=(1,4), channel_prefix='ch%d_')
@@ -167,6 +183,30 @@ class Agilent_N9928A(Instrument):
         '''
         logging.debug(__name__ + ' : Clear averages.')
         self._visainstrument.write('AVER:CLE')
+        
+    def trigger_average_count_times(self):
+        '''
+        Calls single() average_count times.
+
+        Input:
+            None
+
+        Output:
+            None
+        '''
+
+        t0 = time.time()
+        t1 = t0
+        for i in range(self.get_average_count()):
+          # measure the time it took to complete the loop
+          t0 = t1
+          t1 = time.time()
+
+          # sleep until the sweep is almost done
+          if i>0: qt.msleep((t1 - t0) * 0.9)
+          
+          self.single(block_until_done = True)
+          
 
     def autoscale(self,trace):
         '''
@@ -182,7 +222,7 @@ class Agilent_N9928A(Instrument):
         logging.debug(__name__ + 'Setting autoscale on trace %u.' % trace)
         self._visainstrument.write('DISP:WIND:TRAC%u:Y:AUTO' % trace)
 
-    def single(self):
+    def single(self, block_until_done=True):
         '''
         Perform a single sweep, then hold.  This is only valid when in
         single sweep mode. The command is ignored if in continuous
@@ -196,9 +236,29 @@ class Agilent_N9928A(Instrument):
         Output:
             None
         '''
-        logging.debug(__name__ + 'Do a single sweep and then wait for the command to be completed.')
+        logging.debug(__name__ + 'Do a single sweep and %swait for the command to be completed.' % ('' if block_until_done else 'DO NOT '))
         self._visainstrument.write('INIT:IMM')
-#        self._visainstrument.write('*OPC?')
+        if block_until_done: self.block_until_operation_complete()
+
+    def block_until_operation_complete(self):
+        '''
+        Send *OPC? to the device and block until 1 is received. Used to determine whether a (single) sweep is complete.
+        
+        Used in modes: all modes.
+
+        Input:
+           None
+
+        Output:
+            None
+        '''
+        while True:
+          try:
+            if int(self._visainstrument.ask('*OPC?')) == 1: break
+          except VisaIOError as e:
+            logging.debug(__name__ + ' operation complete query taking longer than the visa timeout: %s'  % (str(e)))
+            self._visainstrument.timeout = 30.  # This sometimes gets reset, not sure where...
+            qt.msleep(0.1) # allow interruption
 
     def __byte_array_to_waveform(self, bytes):
         '''
@@ -234,7 +294,7 @@ class Agilent_N9928A(Instrument):
         Output:
             None
         '''
-        logging.debug(__name__ + 'Do a single sweep and then wait for the command to be completed.')
+        logging.debug(__name__ + ' : Get trace %d data.' % trace)
         
         self._visainstrument.write('FORM:DATA REAL,32')
         self.select_trace(trace)
@@ -260,11 +320,6 @@ class Agilent_N9928A(Instrument):
         raw = self._visainstrument.ask('FREQ:DATA?')
         freqs = self.__byte_array_to_waveform(raw)
         return freqs
-
-
-
-        
-
 
 ###  begin the parameter functions--------------    
     def do_get_sweep_mode(self):
@@ -300,6 +355,35 @@ class Agilent_N9928A(Instrument):
         logging.debug(__name__ + 'Setting the sweep mode to state %s' % mode)
         self._visainstrument.write('INIT:CONT %s' % mode)
 
+        
+    def do_get_velocity_factor(self):
+        '''
+        Get the velocity factor.
+        Used in modes: NA.
+
+        Input:
+            None
+
+        Output:
+            velocity factor (float)
+        '''
+        logging.debug(__name__ + 'Getting the velocity factor.')
+        return float(self._visainstrument.ask('CORR:RVEL:COAX?'))
+
+    def do_set_velocity_factor(self, factor):
+        '''
+        Set the velocity factor.
+        Used in modes: NA.
+
+        Input:
+            factor (float): the center frequency in Hz. 
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + 'Setting the center frequency to %f. Hz' % freq)
+        self._visainstrument.write('CORR:RVEL:COAX %f' % freq)
+        
 
     def do_get_frequency_center(self):
         '''
@@ -329,6 +413,41 @@ class Agilent_N9928A(Instrument):
         logging.debug(__name__ + 'Setting the center frequency to %f. Hz' % freq)
         self._visainstrument.write('FREQ:CENT %f' % freq)
 
+        
+    def do_get_source_power(self):
+        '''
+        Get the source power.
+        Used in modes: NA.
+
+        Input:
+            None
+
+        Output:
+            Center frequency in Hz.
+        '''
+        logging.debug(__name__ + ' : Getting the source power.')
+        return float(self._visainstrument.ask(':SOURce:POWer?'))
+        
+    def do_set_source_power(self,pow):
+        '''
+        Set the source power in 0.1 dB steps.
+        Used in modes: NA.
+
+        NOTE: Output power is NOT flat across the frequency range. To set flat source power, 
+        use SOURce:POWer:ALC[:MODE].
+        
+        Input:
+            freq (float): the center frequency in Hz. 
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : Setting the source power manually to %f dBm.' % pow)
+        self._visainstrument.write('SOUR:POW %f' % pow)
+   
+        
+        
+        
     def do_get_IF_bandwidth(self):
         '''
         Get the IF bandwidth.
@@ -493,6 +612,9 @@ class Agilent_N9928A(Instrument):
         self.get_points()
         self.get_IF_bandwidth()
         self.get_sweep_mode()
+        self.get_velocity_factor()
+        self.get_source_power()
+        self.get_source_power_mode()
 
         # need to enable multitrace before getting these parameters. Otherwise, you get error 28 on the screen.
         self.set_multi_trace()
@@ -578,6 +700,34 @@ class Agilent_N9928A(Instrument):
         logging.debug(__name__ + ' : set averaging mode to %f' % val)
         self._visainstrument.write('SENS:AVER:MODE %s' % val)
 
+        
+    def do_get_source_power_mode(self):
+        '''
+        Gets the source power mode.
+
+        Input:
+            None
+
+        Output:
+            len (int) : averaging length
+        '''
+        logging.debug(__name__ + ' : getting source power mode')
+        return str(self._visainstrument.ask('SOUR:POW:ALC?'))
+
+    def do_set_source_power_mode(self, val):
+        '''
+        Set the averaging mode within Network Analyzer (NA) mode.
+
+        Input:
+            len (int) : averaging lengths
+
+        Output:
+            None
+        '''
+        logging.debug(__name__ + ' : set averaging mode to %s' % val)
+        self._visainstrument.write('SOUR:POW:ALC %s' % val)
+        
+        
     def do_get_current_measurement(self,channel):
         '''
         Query the current measurement.
