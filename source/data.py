@@ -248,6 +248,7 @@ class Data(SharedGObject):
         self._temp_binary = kwargs.get('binary', True)
         self._options = kwargs
         self._file = None
+        self._log_file_handler = None
         self._stop_req_hid = None
 
         # Dimension info
@@ -495,6 +496,10 @@ class Data(SharedGObject):
         fn, ext = os.path.splitext(self.get_filepath())
         return fn + '.set'
 
+    def get_log_filepath(self):
+        fn, ext = os.path.splitext(self.get_filepath())
+        return fn + '.log'
+
     def is_file_open(self):
         '''Return whether a file is open or not.'''
 
@@ -560,11 +565,12 @@ class Data(SharedGObject):
 
 ### File writing
 
-    def create_file(self, name=None, filepath=None, settings_file=True):
+    def create_file(self, name=None, filepath=None, settings_file=True, log_file=True, log_level=logging.INFO):
         '''
         Create a new data file and leave it open. In addition a
         settings file is generated, unless settings_file=False is
-        specified.
+        specified. A copy of log messages generated during the measurement
+	will also be saved, unless log_file=False.
 
         This function should be called after adding the comment and the
         coordinate and value metadata, because it writes the file header.
@@ -591,6 +597,9 @@ class Data(SharedGObject):
         if settings_file and in_qtlab:
             self._write_settings_file()
 
+        if log_file and in_qtlab:
+            self._open_log_file()
+
         try:
             if in_qtlab:
                 self._stop_req_hid = \
@@ -602,8 +611,12 @@ class Data(SharedGObject):
 
     def close_file(self):
         '''
-        Close open data file.
+        Close open data and log files.
         '''
+
+        if self._log_file_handler is not None:
+            self._log_file_handler.close()
+            self._log_file_handler = None
 
         if self._file is not None:
             self._file.close()
@@ -612,6 +625,18 @@ class Data(SharedGObject):
         if self._stop_req_hid is not None and in_qtlab:
             qt.flow.disconnect(self._stop_req_hid)
             self._stop_req_hid = None
+
+    def _open_log_file(self, log_level=logging.INFO):
+        fn = self.get_log_filepath()
+	if len(logging.getLogger().handlers) > 0:
+  	  formatter = logging.getLogger().handlers[0].formatter
+	else:
+	  formatter = None
+
+	self._log_file_handler = logging.FileHandler(fn, log_level)
+	self._log_file_handler.setLevel(log_level)
+	self._log_file_handler.setFormatter(formatter)
+	logging.getLogger().addHandler(self._log_file_handler)
 
     def _write_settings_file(self):
         fn = self.get_settings_filepath()
