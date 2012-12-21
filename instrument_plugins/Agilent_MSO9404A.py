@@ -76,7 +76,10 @@ class Agilent_MSO9404A(Instrument):
                            format_map={"LEFT" : "left","CENT" : "center","RIGH" : "right"})
                            
         self.add_parameter('timebase_ref_clock_mode',
-            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, type=types.StringType)                  
+              flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET,
+              type=types.StringType,
+              option_list=('INT', 'EXT')
+            )
 
         # 'Channel' parameters 
         self.add_parameter('vertical_range',
@@ -714,25 +717,20 @@ class Agilent_MSO9404A(Instrument):
         '''
         logging.debug(__name__ + ' Getting status of external reference clock: ')
         outp = self._visainstrument.ask(':TIMEBASE:REFCLOCK?')
-        if outp=='1':
-            return('EXT')
-        elif outp=='0':
-            return('INT')
-        else:
-            return(np.NaN)
-    
+        assert (outp in ['0', '1']), 'Did not understand "%s"' % outp
+        return 'EXT' if outp=='1' else 'INT'
     
     def do_set_timebase_ref_clock_mode(self, val):
         '''
 
         Input:
-            val (int) : external reference clock EXT(1) or INT(0).
+            val : external reference clock EXT or INT.
 
         Output:
             True or false.
         '''
         logging.debug(__name__ + ' : Setting status of external reference clock:  %s' % val)
-        self._visainstrument.write(':TIMEBASE:REFCLOCK %s' % val)
+        self._visainstrument.write(':TIMEBASE:REFCLOCK %u' % int(val=='EXT'))
 
     
     def do_get_acquire_average_mode(self): 
@@ -1500,6 +1498,7 @@ class Agilent_MSO9404A(Instrument):
         self.get_timebase_scale()
         self.get_timebase_delay()
         self.get_timebase_reference()
+        self.get_timebase_ref_clock_mode()
         self.get_trigger_mode()
         self.get_trigger_sweep_mode()
         self.get_edge_trigger_source()
@@ -1520,22 +1519,3 @@ class Agilent_MSO9404A(Instrument):
             self.get('ch%d_input_coupling' % i)
             self.get('ch%d_trigger_and_source' % i)
             self.get('ch%d_trigger_level' % i)
-
-
-
-
-
-
-        
-
-
- 
-
-
-
-
-
-
-
-
-
