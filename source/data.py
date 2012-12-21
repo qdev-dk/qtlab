@@ -570,7 +570,7 @@ class Data(SharedGObject):
         Create a new data file and leave it open. In addition a
         settings file is generated, unless settings_file=False is
         specified. A copy of log messages generated during the measurement
-	will also be saved, unless log_file=False.
+        will also be saved, unless log_file=False.
 
         This function should be called after adding the comment and the
         coordinate and value metadata, because it writes the file header.
@@ -615,6 +615,7 @@ class Data(SharedGObject):
         '''
 
         if self._log_file_handler is not None:
+            logging.getLogger().removeHandler(self._log_file_handler)
             self._log_file_handler.close()
             self._log_file_handler = None
 
@@ -628,15 +629,16 @@ class Data(SharedGObject):
 
     def _open_log_file(self, log_level=logging.INFO):
         fn = self.get_log_filepath()
-	if len(logging.getLogger().handlers) > 0:
-  	  formatter = logging.getLogger().handlers[0].formatter
-	else:
-	  formatter = None
+        if len(logging.getLogger().handlers) > 0:
+          formatter = logging.getLogger().handlers[0].formatter
+        else:
+          formatter = None
 
-	self._log_file_handler = logging.FileHandler(fn, log_level)
-	self._log_file_handler.setLevel(log_level)
-	self._log_file_handler.setFormatter(formatter)
-	logging.getLogger().addHandler(self._log_file_handler)
+        self._log_file_handler = logging.FileHandler(fn)
+        self._log_file_handler.setLevel(log_level)
+        self._log_file_handler.setFormatter(formatter)
+        logging.getLogger().addHandler(self._log_file_handler)
+        logging.debug('Added log_file_handler. path="%s", formatter="%s"' % (fn, str(formatter)))
 
     def _write_settings_file(self):
         fn = self.get_settings_filepath()
