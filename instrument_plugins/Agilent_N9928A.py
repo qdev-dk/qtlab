@@ -184,9 +184,9 @@ class Agilent_N9928A(Instrument):
         logging.debug(__name__ + ' : Clear averages.')
         self._visainstrument.write('AVER:CLE')
         
-    def trigger_average_count_times(self):
+    def trigger_average_count_times(self, count=None, autoscale_after_first_sweep=False):
         '''
-        Calls single() average_count times.
+        Calls single() average_count (or count, if specified) times.
 
         Input:
             None
@@ -197,15 +197,19 @@ class Agilent_N9928A(Instrument):
 
         t0 = time.time()
         t1 = t0
-        for i in range(self.get_average_count()):
+        for i in range(self.get_average_count() if count==None else count):
           # measure the time it took to complete the loop
           t0 = t1
           t1 = time.time()
 
           # sleep until the sweep is almost done
-          if i>0: qt.msleep((t1 - t0) * 0.9)
+          if i>0:
+            qt.msleep((t1 - t0) * 0.9)
           
           self.single(block_until_done = True)
+
+          if i==0 and autoscale_after_first_sweep:
+            for j in range(4): self.autoscale(1+j)
           
 
     def autoscale(self,trace):
