@@ -235,6 +235,12 @@ class Data(SharedGObject):
             tempfile (bool), default False. If True create a temporary file
                 for the data.
             binary (bool), default True. Whether tempfile should be binary.
+            row_mask, optional list of booleans that specifies which rows
+                      from an existing data file are loaded. If None, all
+                      rows are loaded. All rows beyond len(row_mask) are
+                      ignored.
+              True  --> the data point (row) is loaded
+              False --> the data point (row) is ignored
         '''
 
         # Init SharedGObject a bit lower
@@ -242,6 +248,7 @@ class Data(SharedGObject):
         name = kwargs.get('name', '')
         infile = kwargs.get('infile', True)
         inmem = kwargs.get('inmem', False)
+        self._row_mask = kwargs.get('row_mask')
 
         self._inmem = inmem
         self._tempfile = kwargs.get('tempfile', False)
@@ -1056,7 +1063,15 @@ class Data(SharedGObject):
 
         blocksize = 0
 
+        row_no = 0
         for line in f:
+
+            # skip the line if not True in the row_mask
+            if (self._row_mask != None and
+                (row_no >= len(self._row_mask)
+                 or not self._row_mask[row_no])):
+              continue
+
             line = line.rstrip(' \n\t\r')
 
             # Count blocks
@@ -1080,6 +1095,8 @@ class Data(SharedGObject):
             if len(fields) > 0:
                 data.append(fields)
                 blocksize += 1
+
+            row_no += 1
 
         self._add_missing_dimensions(nfields)
         self._count_coord_val_dims()
