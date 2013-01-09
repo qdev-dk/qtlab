@@ -1063,14 +1063,8 @@ class Data(SharedGObject):
 
         blocksize = 0
 
-        row_no = 0
+        row_no = -1
         for line in f:
-
-            # skip the line if not True in the row_mask
-            if (self._row_mask != None and
-                (row_no >= len(self._row_mask)
-                 or not self._row_mask[row_no])):
-              continue
 
             line = line.rstrip(' \n\t\r')
 
@@ -1093,10 +1087,18 @@ class Data(SharedGObject):
 
             fields = [float(f) for f in fields]
             if len(fields) > 0:
+
+                row_no += 1
+                if self._row_mask != None:
+                  # skip the line if row_mask[row_no] is False
+                  if not (row_no < len(self._row_mask)
+                          and self._row_mask[row_no]):
+                    continue
+
                 data.append(fields)
                 blocksize += 1
 
-            row_no += 1
+        logging.debug('Read %u data points.' % (len(data)))
 
         self._add_missing_dimensions(nfields)
         self._count_coord_val_dims()
