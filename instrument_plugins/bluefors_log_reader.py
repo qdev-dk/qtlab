@@ -385,7 +385,7 @@ class bluefors_log_reader(Instrument):
 
           if all_data == None:
             msg = 'No pressure data loaded for t = %s.' % str(t)
-            logging.warm(msg)
+            logging.warn(msg)
             raise Exception(msg)
 
           return all_data
