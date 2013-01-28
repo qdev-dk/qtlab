@@ -100,10 +100,10 @@ class bluefors_log_reader(Instrument):
         self.add_function('base_heater_current_to_t6')
 
 
-        # if (reset):
-            # self.reset()
-        # else:
-        self.get_all()
+        if (reset):
+            self.reset()
+        else:
+            self.get_all()
         
     def get_all(self):
         '''
@@ -137,19 +137,18 @@ class bluefors_log_reader(Instrument):
         
         self.get_latest_flow()
         
-    # def reset(self):
-        # '''
-        # Resets the instrument to default values
+    def reset(self):
+        '''
+        Resets the instrument to default values
 
-        # Input:
-            # None
+        Input:
+            None
 
-        # Output:
-            # None
-        # '''
-        # logging.info(__name__ + ' : resetting instrument')
-        # self._visainstrument.write('*RST')
-        # self.get_all()
+        Output:
+            None
+        '''
+        logging.info(__name__ + ' : resetting instrument')
+        pass
 
     def __interpolate_value_at_time(self, value_name, load_data, at_time=None, interpolation_kind='linear', cache_life_time=10.):
         '''
