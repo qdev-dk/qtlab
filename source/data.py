@@ -351,6 +351,13 @@ class Data(SharedGObject):
         else:
             return self._dimensions[dim].get('name', 'col%d' % dim)
 
+    def get_dimension_index(self, name):
+        '''Return the index of the dimension with the given name'''
+        if name==None: raise Exception('Dimension name cannot be None.')
+        for i,d in enumerate(self._dimensions):
+            if d.get('name', None) == name: return i
+        raise Exception('Dimension "%s" does not exist.' % name)
+
     def get_ndimensions(self):
         '''Return number of dimensions.'''
         return len(self._dimensions)
