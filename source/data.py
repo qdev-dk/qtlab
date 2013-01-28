@@ -321,7 +321,16 @@ class Data(SharedGObject):
         return ret
 
     def __getitem__(self, index):
-        return self._data[index]
+        '''
+        Access the data as an ndarray.
+
+        index may be a slice or a string, in which case it is interpreted
+        as a dimension name.
+        '''
+        if isinstance(index, basestring):
+            return self._data[:,self.get_dimension_index(index)]
+        else:
+            return self._data[index]
 
     def __setitem__(self, index, val):
         self._data[index] = val
