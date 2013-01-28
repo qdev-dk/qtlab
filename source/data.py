@@ -248,7 +248,7 @@ class Data(SharedGObject):
         name = kwargs.get('name', '')
         infile = kwargs.get('infile', True)
         inmem = kwargs.get('inmem', False)
-        self._row_mask = kwargs.get('row_mask')
+        self._load_row_mask = kwargs.get('row_mask')
 
         self._inmem = inmem
         self._tempfile = kwargs.get('tempfile', False)
@@ -1089,10 +1089,10 @@ class Data(SharedGObject):
             if len(fields) > 0:
 
                 row_no += 1
-                if self._row_mask != None:
+                if self._load_row_mask != None:
                   # skip the line if row_mask[row_no] is False
-                  if not (row_no < len(self._row_mask)
-                          and self._row_mask[row_no]):
+                  if not (row_no < len(self._load_row_mask)
+                          and self._load_row_mask[row_no]):
                     continue
 
                 data.append(fields)
