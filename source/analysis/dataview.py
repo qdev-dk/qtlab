@@ -92,6 +92,8 @@ class DataView():
         for name, fn in self._virtual_dims.items():
             d._virtual_dims[name] = fn
 
+        return d
+
     def clear_mask(self):
         '''
         Unmask all data (i.e. make all data in the initially
@@ -147,6 +149,49 @@ class DataView():
             assert row_mask.shape == ((~old_mask).sum(),), 'The length of the new mask must be equal to the number of previously unmasked rows.'
             new_masked_entries = (np.arange(len(old_mask),dtype=np.int)[~old_mask])[row_mask]
             self._masked_data.mask[new_masked_entries,:] = True
+
+
+    def divide_into_sweeps(self, sweep_dimension):
+        '''
+        Divide the rows into "sweeps" based on changing direction of column 'sweep_dimension'.
+        
+        Returns a sequence of tuples indicating the start and end of each sweep.
+        '''
+        sdim = self[sweep_dimension]
+        dx = np.sign(sdim[1:] - sdim[:-1])
+        change_in_sign = np.array(np.where(dx[1:] * dx[:-1] < 0),dtype=np.int).reshape((-1))
+
+        if len(change_in_sign) == 0: return np.array([[0, len(sdim)]])
+
+        start_indices = np.concatenate(([0], change_in_sign))
+        stop_indices  = np.concatenate((change_in_sign, [len(sdim)]))
+
+        return np.concatenate((start_indices, stop_indices)).reshape((2,-1)).T
+        
+
+    def mask_sweeps(self, sweep_dimension, sl, unmask_instead=False):
+        '''
+        Mask entire sweeps (see divide_into_sweeps()).
+
+        sl can be a single integer or any slice object compatible with a 1D numpy.ndarray (list of sweeps).
+
+        unmask_instead -- unmask the specified sweeps instead, mask everything else
+        '''
+        sweeps = self.divide_into_sweeps(sweep_dimension)
+        row_mask = np.zeros(len(self[sweep_dimension]), dtype=np.bool)
+        for start,stop in ([sweeps[sl]] if isinstance(sl, int) else sweeps[sl]):
+            logging.debug("%smasking start: %d, stop %d" % ('un' if unmask_instead else '',start, stop))
+            row_mask[start:stop] = True
+        self.mask_rows(~row_mask if unmask_instead else row_mask)
+
+
+    def unmask_sweeps(self, sweep_dimension, sl):
+        '''
+        Mask all rows except the specified sweeps (see divide_into_sweeps()).
+
+        sl can be a single integer or any slice object compatible with a 1D numpy.ndarray (list of sweeps).
+        '''
+        self.mask_sweeps(sweep_dimension, sl, unmask_instead=True)
 
 
     def get_data(self, masked=False, fill=False, deep_copy=False):
