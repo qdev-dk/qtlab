@@ -1162,6 +1162,12 @@ class Data(SharedGObject):
                     self._dimensions[colnum][tagname] = int(m.group(1))
                 else:
                     try:
+                        if m.group(1) in ['time']:
+                            # list of commonly used column names NOT that should not be eval'd.
+                            # to be honest, I don't understand why you ever want them to be...
+                            msg = 'Not evaluating "%s" as python code.' % m.group(1)
+                            logging.info(msg)
+                            raise Exception(msg)
                         self._dimensions[colnum][tagname] = eval(m.group(1))
                     except:
                         self._dimensions[colnum][tagname] = m.group(1)
