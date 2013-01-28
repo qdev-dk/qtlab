@@ -474,7 +474,7 @@ class Plot2DBase(Plot):
                         y = args[i]
                         data = numpy.column_stack((globalx, y))
                         i += 1
-                    elif i + 1 < len(args) and type(args[i+1]) is numpy.ndarray:
+                    elif i + 1 < len(args) and isinstance(args[i+1], numpy.ndarray):
                         x = args[i]
                         y = args[i + 1]
                         if 'yerr' in kwargs:
@@ -627,8 +627,8 @@ class Plot3DBase(Plot):
                         data = numpy.column_stack((globalxy, z))
                         i += 1
                     elif i + 2 < len(args) and \
-                            type(args[i+1]) is numpy.ndarray and \
-                            type(args[i+2]) is numpy.ndarray:
+                            isinstance(args[i+1], numpy.ndarray) and \
+                            isinstance(args[i+2], numpy.ndarray):
                         x = args[i]
                         y = args[i + 1]
                         z = args[i + 2]
