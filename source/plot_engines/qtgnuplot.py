@@ -279,7 +279,7 @@ class _QTGnuPlot():
         term = 'postscript color enhanced %s' % (fontstring)
         self.save_as_type(term, 'ps', filepath=filepath, **kwargs)
 
-    def save_eps(self, filepath=None, font='Helvetica', fontsize=14, **kwargs):
+    def save_eps(self, filepath=None, font='Helvetica', fontsize=14, size=None, **kwargs):
         '''
         Save encapsulated-postscript version of the plot.
 
@@ -289,8 +289,9 @@ class _QTGnuPlot():
             - fontsize: font size
         '''
 
+        sizestring = ' size '+size if size!=None else ''
         fontstring = '"%s, %s"' % (font, fontsize)
-        term = 'postscript eps color enhanced %s' % (fontstring)
+        term = 'postscript eps %s color enhanced %s' % (sizestring, fontstring)
         self.save_as_type(term, 'eps', filepath=filepath, **kwargs)
 
     def save_png(self, filepath=None, font='', transparent=False, **kwargs):
