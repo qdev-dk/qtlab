@@ -749,7 +749,7 @@ class Data(SharedGObject):
 
     def _write_data(self):
         if not self._inmem:
-            logging.warning('Unable to _write_data() without having it memory')
+            logging.warning('Unable to _write_data() without having it in memory')
             return False
 
         blockcols = self._get_block_columns()
@@ -766,10 +766,16 @@ class Data(SharedGObject):
 
     def _write_binary(self):
         if not self._inmem:
-            logging.warning('Unable to _write_binary() without having it memory')
+            logging.warning('Unable to _write_binary() without having it in memory')
             return False
 
-        self._data.tofile(self._file.get_file())
+        try:
+            self._data.tofile(self._file.get_file())
+        except NotImplementedError as e:
+            # This is raised (at least in Python 2.7),
+            # if self._data is a numpy.ma masked array,
+            # instead of a regular ndarray.
+            numpy.array(self._data).tofile(self._file.get_file())
         return True
 
 ### High-level file writing
