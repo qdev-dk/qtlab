@@ -352,6 +352,9 @@ class Data(SharedGObject):
         else:
             return 0
 
+    def get_dimension_names(self):
+        return [ self.get_dimension_name(i) for i in range(self.get_ndimensions()) ]
+
     def get_dimension_name(self, dim):
         '''Return the name of dimension dim'''
 
