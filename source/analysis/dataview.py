@@ -49,15 +49,53 @@ class DataView():
         Create a new view of an existing data object for post-processing.
         The original data object will not be modified.
 
+        args:
+          data -- qt.Data object(s)
+        
         kwargs input:
           deep_copy -- specifies whether the underlying data is copied
                        or only referenced (more error prone, but memory efficient)
         '''
 
-        self._data = data
         self._virtual_dims = {}
 
-        unmasked = data.get_data().copy() if deep_copy else data.get_data()
+        if isinstance(data, DataView): # clone
+          self._dimensions = data._dimensions
+          self._dimension_indices = data._dimension_indices
+          self._masked_data = ma.masked_array(data._masked_data.data, fill_value=data._masked_data.fill_value)
+          self._masked_data.mask = data._masked_data.mask.copy()
+
+          for name, fn in data._virtual_dims.items():
+              self._virtual_dims[name] = fn
+
+          return
+
+        try: # see if a single Data object
+          self._dimension_names = data.get_dimension_names()
+          unmasked = data.get_data().copy() if deep_copy else data.get_data()
+
+        except: # probably a sequence of Data objects then
+          self._dimensions = data[0].get_dimension_names()
+          
+          unmasked = {}
+          for dim in self._dimensions:
+            unmasked[dim] = []
+            for dat in data:
+              try:
+                unmasked[dim].append(dat[dim])
+              except:
+                # ignore dimensions that don't exist in all data objects
+                del unmasked[dim]
+                logging.warn("Dimensions '%s' does not exist in Data object '%s'." % (dim, str(dat)))
+                break
+
+            # concatenate rows from all files
+            if dim in unmasked.keys():
+              unmasked[dim] = np.concatenate(unmasked[dim])
+          
+          # keep only dimensions that could be parsed from all files
+          self._dimensions = unmasked.keys()
+          unmasked = np.array([unmasked[k] for k in self._dimensions]).T
 
         try:
           self._masked_data = ma.masked_array(unmasked, fill_value=np.NaN)
@@ -65,6 +103,7 @@ class DataView():
           # fill_value=np.NaN does not work for non-float data
           self._masked_data = ma.masked_array(unmasked)
 
+        self._dimension_indices = dict([(n,i) for i,n in enumerate(self._dimensions)])
         self.set_mask(False)
 
     def __getitem__(self, index):
@@ -85,14 +124,7 @@ class DataView():
         
         copy_data -- whether the underlying data is also deep copied.
         '''
-        d = DataView(self._data, deep_copy=copy_data)
-        assert(d._masked_data.shape == self._masked_data.shape), 'Cannot copy because the underlying data object size has been changed!'
-        d._masked_data.mask = self._masked_data.mask.copy()
-
-        for name, fn in self._virtual_dims.items():
-            d._virtual_dims[name] = fn
-
-        return d
+        return DataView(self, deep_copy=copy_data)
 
     def clear_mask(self):
         '''
@@ -221,10 +253,10 @@ class DataView():
 
         return d
 
-    def get_column(self, index, masked=False, fill=False, deep_copy=False):
+    def get_column(self, name, masked=False, fill=False, deep_copy=False):
         '''
-        Get the non-masked entries of dimension 'index' as a 1D ndarray.
-        index may be a number or a string corresponding to a dimension name.
+        Get the non-masked entries of dimension 'name' as a 1D ndarray.
+        name is the dimension name.
 
         kwargs:
           masked    -- return the data as a masked array instead of ndarray
@@ -235,13 +267,10 @@ class DataView():
         if masked and fill:
             logging.warn('Specifying both "masked" and "fill" does not make sense.')
 
-        if isinstance(index, basestring):
-            if index in self._virtual_dims.keys():
-                d = self._virtual_dims[index](self)
-            else:
-                d = self._masked_data[:,self._data.get_dimension_index(index)]
+        if name in self._virtual_dims.keys():
+            d = self._virtual_dims[name](self)
         else:
-            d = self.get_data()[:,index]
+            d = self._masked_data[:,self._dimension_indices[name]]
         
         if masked: pass
         elif fill: d = d.filled()
