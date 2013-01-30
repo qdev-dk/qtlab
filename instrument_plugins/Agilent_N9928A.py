@@ -71,7 +71,7 @@ class Agilent_N9928A(Instrument):
             flags=Instrument.FLAG_GETSET, minval=30E3, maxval=26.5E9, units = 'Hz', type=types.FloatType)
 
         self.add_parameter('IF_bandwidth',
-            flags=Instrument.FLAG_GETSET, minval=300, maxval=30E3, units = 'Hz', type=types.FloatType)
+            flags=Instrument.FLAG_GETSET, minval=10, maxval=30E3, units = 'Hz', type=types.FloatType)
 
         self.add_parameter('points',
             flags=Instrument.FLAG_GETSET, minval=3, maxval=10001, type=types.IntType)
