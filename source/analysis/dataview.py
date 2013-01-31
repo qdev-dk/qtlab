@@ -227,7 +227,7 @@ class DataView():
         # the direction changing twice in a row means that sweeps are being done repeatedly
         # in the same direction.
         for i in range(len(change_in_sign)-1, 0, -1):
-          if change_in_sign[i]-change_in_sign[i-1] == 1: del change_in_sign[i]
+          if change_in_sign[i]-change_in_sign[i-1] == 1: del change_in_sign[i-1]
 
         if len(change_in_sign) == 0: return np.array([[0, len(sdim)]])
 
