@@ -26,6 +26,7 @@ import re
 import logging
 import copy
 import shutil
+import itertools
 
 from gettext import gettext as _L
 
@@ -44,7 +45,7 @@ class DataView():
     class for post-processing measurement data
     '''
 
-    def __init__(self, data, deep_copy=True, **kwargs):
+    def __init__(self, data, deep_copy=True, source_column_name='data_source', **kwargs):
         '''
         Create a new view of an existing data object for post-processing.
         The original data object will not be modified.
@@ -53,8 +54,11 @@ class DataView():
           data -- qt.Data object(s)
         
         kwargs input:
-          deep_copy -- specifies whether the underlying data is copied
-                       or only referenced (more error prone, but memory efficient)
+          deep_copy          -- specifies whether the underlying data is copied or 
+                                only referenced (more error prone, but memory efficient)
+          source_column_name -- specifies the name of the (virtual) column that tells which
+                                data object the row originates from. Specify None, if
+                                you don't want this column to be added.
         '''
 
         self._virtual_dims = {}
@@ -62,8 +66,12 @@ class DataView():
         if isinstance(data, DataView): # clone
           self._dimensions = data._dimensions
           self._dimension_indices = data._dimension_indices
-          self._masked_data = ma.masked_array(data._masked_data.data, fill_value=data._masked_data.fill_value)
-          self._masked_data.mask = data._masked_data.mask.copy()
+          if deep_copy:
+            self._masked_data = ma.masked_array(data._masked_data.data, fill_value=data._masked_data.fill_value)
+            self._masked_data.mask = data._masked_data.mask.copy()
+          else:
+            self._masked_data = ma.masked_array(data._masked_data.data, fill_value=data._masked_data.fill_value)
+            self._masked_data.mask = data._masked_data.mask.copy()
 
           for name, fn in data._virtual_dims.items():
               self._virtual_dims[name] = fn
@@ -73,6 +81,10 @@ class DataView():
         try: # see if a single Data object
           self._dimension_names = data.get_dimension_names()
           unmasked = data.get_data().copy() if deep_copy else data.get_data()
+          
+          if source_column_name != None:
+            n = data.get_name()
+            source_col = [n for i in range(len(data.get_npoints()))]
 
         except: # probably a sequence of Data objects then
           self._dimensions = data[0].get_dimension_names()
@@ -93,6 +105,13 @@ class DataView():
             if dim in unmasked.keys():
               unmasked[dim] = np.concatenate(unmasked[dim])
           
+          # add a column that specifies the source data file
+          if source_column_name != None:
+            names = [ '%s_(%s)' % (dat.get_name(), dat.get_filename().strip('.dat')) for dat in data ]
+            lens = [ dat.get_npoints() for dat in data ]
+            source_col = [ [n for jj in range(l)] for n,l in zip(names,lens) ]
+            source_col = itertools.chain.from_iterable(source_col) # flatten
+          
           # keep only dimensions that could be parsed from all files
           self._dimensions = unmasked.keys()
           unmasked = np.array([unmasked[k] for k in self._dimensions]).T
@@ -105,6 +124,9 @@ class DataView():
 
         self._dimension_indices = dict([(n,i) for i,n in enumerate(self._dimensions)])
         self.set_mask(False)
+
+        if source_column_name != None:
+          self.add_virtual_dimension(source_column_name, lambda d: itertools.compress(source_col, d._masked_data.mask[:,0]), returns_masked_array=False)
 
     def __getitem__(self, index):
         '''
@@ -268,7 +290,8 @@ class DataView():
             logging.warn('Specifying both "masked" and "fill" does not make sense.')
 
         if name in self._virtual_dims.keys():
-            d = self._virtual_dims[name](self)
+            d = self._virtual_dims[name]['fn'](self)
+            if not self._virtual_dims[name]['returns_ma']: return d
         else:
             d = self._masked_data[:,self._dimension_indices[name]]
         
@@ -280,13 +303,20 @@ class DataView():
 
         return d
 
-    def add_virtual_dimension(self, name, fn):
+    def add_virtual_dimension(self, name, fn, returns_masked_array=True):
         '''
-        Makes the vector fn[self.get_data()] accessible as self[name].
+        Makes the vector fn[self] accessible as self[name].
 
         It is advisable that fn[data].shape == data.shape.
+        
+        kwargs:
+          returns_masked_array -- fn returns a masked array, so that the
+                                  usual arguments passed to get_column are
+                                  automatically handled. Otherwise, no
+                                  masking is done to fn[data]
         '''
-        self._virtual_dims[name] = fn
+        logging.debug('adding virtual dimension "%s"' % name)
+        self._virtual_dims[name] = {'fn': fn, 'returns_ma': returns_masked_array}
 
     def remove_virtual_dimension(self, name):
         if name in self._virtual_dims.keys():
