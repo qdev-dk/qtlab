@@ -222,7 +222,7 @@ class DataView():
         '''
         sdim = self[sweep_dimension]
         dx = np.sign(sdim[1:] - sdim[:-1])
-        change_in_sign = np.array(np.where(dx[1:] * dx[:-1] < 0),dtype=np.int).reshape((-1)).tolist()
+        change_in_sign = (1 + np.array(np.where(dx[1:] * dx[:-1] < 0),dtype=np.int).reshape((-1))).tolist()
         
         # the direction changing twice in a row means that sweeps are being done repeatedly
         # in the same direction.
