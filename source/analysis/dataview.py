@@ -64,8 +64,11 @@ class DataView():
         self._virtual_dims = {}
 
         if isinstance(data, DataView): # clone
+          # these private variables should be immutable so no need to deep copy
           self._dimensions = data._dimensions
           self._dimension_indices = data._dimension_indices
+          self._source_col = data._source_col
+          
           if deep_copy:
             self._masked_data = ma.masked_array(data._masked_data.data, fill_value=data._masked_data.fill_value)
             self._masked_data.mask = data._masked_data.mask.copy()
@@ -84,7 +87,7 @@ class DataView():
           
           if source_column_name != None:
             n = data.get_name()
-            source_col = [n for i in range(len(data.get_npoints()))]
+            self._source_col = [n for i in range(len(data.get_npoints()))]
 
         except: # probably a sequence of Data objects then
           self._dimensions = data[0].get_dimension_names()
@@ -109,8 +112,8 @@ class DataView():
           if source_column_name != None:
             names = [ '%s_(%s)' % (dat.get_name(), dat.get_filename().strip('.dat')) for dat in data ]
             lens = [ dat.get_npoints() for dat in data ]
-            source_col = [ [n for jj in range(l)] for n,l in zip(names,lens) ]
-            source_col = itertools.chain.from_iterable(source_col) # flatten
+            self._source_col = [ [n for jj in range(l)] for n,l in zip(names,lens) ]
+            self._source_col = [ jj for jj in itertools.chain.from_iterable(self._source_col) ] # flatten
           
           # keep only dimensions that could be parsed from all files
           self._dimensions = unmasked.keys()
@@ -126,7 +129,7 @@ class DataView():
         self.set_mask(False)
 
         if source_column_name != None:
-          self.add_virtual_dimension(source_column_name, lambda d: itertools.compress(source_col, d._masked_data.mask[:,0]), returns_masked_array=False)
+          self.add_virtual_dimension(source_column_name, lambda d: d.get_data_source(), returns_masked_array=False)
 
     def __getitem__(self, index):
         '''
@@ -147,6 +150,12 @@ class DataView():
         copy_data -- whether the underlying data is also deep copied.
         '''
         return DataView(self, deep_copy=copy_data)
+
+    def get_data_source(self):
+        '''
+        Returns a list of strings that tell which Data object each of the unmasked rows originated from.
+        '''
+        return [ i for i in itertools.compress(self._source_col, ~(self._masked_data.mask[:,0])) ]
 
     def clear_mask(self):
         '''
