@@ -213,14 +213,21 @@ class DataView():
         '''
         sdim = self[sweep_dimension]
         dx = np.sign(sdim[1:] - sdim[:-1])
-        change_in_sign = np.array(np.where(dx[1:] * dx[:-1] < 0),dtype=np.int).reshape((-1))
+        change_in_sign = np.array(np.where(dx[1:] * dx[:-1] < 0),dtype=np.int).reshape((-1)).tolist()
+        
+        # the direction changing twice in a row means that sweeps are being done repeatedly
+        # in the same direction.
+        for i in range(len(change_in_sign)-1, 0, -1):
+          if change_in_sign[i]-change_in_sign[i-1] == 1: del change_in_sign[i]
 
         if len(change_in_sign) == 0: return np.array([[0, len(sdim)]])
 
         start_indices = np.concatenate(([0], change_in_sign))
         stop_indices  = np.concatenate((change_in_sign, [len(sdim)]))
 
-        return np.concatenate((start_indices, stop_indices)).reshape((2,-1)).T
+        sweeps = np.concatenate((start_indices, stop_indices)).reshape((2,-1)).T
+        
+        return sweeps
         
 
     def mask_sweeps(self, sweep_dimension, sl, unmask_instead=False):
