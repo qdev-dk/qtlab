@@ -480,7 +480,7 @@ class Instrument(SharedGObject):
         Ouput:  None
         '''
         if name not in self._parameters:
-            print 'Parameter %s not defined' % name
+            logging.warn('Parameter %s not defined' % name)
             return None
 
         for key, val in kwargs.iteritems():
@@ -691,7 +691,7 @@ class Instrument(SharedGObject):
         try:
             p = self._parameters[name]
         except:
-            print 'Could not retrieve options for parameter %s' % name
+            logging.warn('Could not retrieve options for parameter %s' % name)
             return None
 
         if 'channel' in p and 'channel' not in kwargs:
@@ -711,7 +711,7 @@ class Instrument(SharedGObject):
 
         # Check this here; getting of cached values should work
         if not flags & 1: #Instrument.FLAG_GET:
-            print 'Instrument does not support getting of %s' % name
+            logging.warn('Instrument does not support getting of %s' % name)
             return None
 
         if 'base_name' in p:
@@ -904,7 +904,7 @@ class Instrument(SharedGObject):
             return None
 
         if not p['flags'] & Instrument.FLAG_SET:
-            print 'Instrument does not support setting of %s' % name
+            logging.warn('Instrument does not support setting of %s' % name)
             return None
 
         if 'channel' in p and 'channel' not in kwargs:
@@ -935,11 +935,11 @@ class Instrument(SharedGObject):
                 return None
 
         if 'minval' in p and value < p['minval']:
-            print 'Trying to set too small value: %s' % value
+            logging.warn('Trying to set too small value: %s' % value)
             return None
 
         if 'maxval' in p and value > p['maxval']:
-            print 'Trying to set too large value: %s' % value
+            logging.warn('Trying to set too large value: %s' % value)
             return None
 
         if 'base_name' in p:
