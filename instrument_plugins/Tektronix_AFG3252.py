@@ -88,11 +88,11 @@ class Tektronix_AFG3252(Instrument):
 
         self.add_parameter('amplitude', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
-            channels=(1, 2), minval=0, maxval=2, units='Volts', channel_prefix='ch%d_')
+            channels=(1, 2), minval=0, maxval=2.5, units='V', channel_prefix='ch%d_')
 
         self.add_parameter('offset', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
-            channels=(1, 2), minval=-2, maxval=2, units='Volts', channel_prefix='ch%d_')
+            channels=(1, 2), minval=-2, maxval=2, units='V', channel_prefix='ch%d_')
 
         self.add_parameter('frequency', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
@@ -177,6 +177,7 @@ class Tektronix_AFG3252(Instrument):
         logging.warning(__name__ + ' : get all not yet fully functional')
 
         self.get_clock()
+        self.get_ref_clock_mode()
 
         for i in range(1,3):
             self.get('ch%d_amplitude' % i)
@@ -298,10 +299,10 @@ class Tektronix_AFG3252(Instrument):
 
     def do_set_amplitude(self, amp, channel):
         '''
-        Sets the amplitude of the designated channel of the instrument
+        Sets the amplitude of the designated channel of the instrument.
 
         Input:
-            amp (float)   : amplitude in Volts
+            amp (float)   : amplitude in Volts. NOTE: The AFG screen shows pk-to-pk amplitude!
             channel (int) : 1 or 2, the number of the designated channel
 
         Output:
@@ -309,7 +310,7 @@ class Tektronix_AFG3252(Instrument):
         '''
         logging.debug(__name__ + ' : Set amplitude of channel %s to %.6f'
             % (channel, amp))
-        self._visainstrument.write('SOUR%s:VOLT:LEV:IMM:AMPL %.6f' % (channel, amp))
+        self._visainstrument.write('SOUR%s:VOLT:LEV:IMM:AMPL %.6f' % (channel, 2*amp))
 
 
     def do_get_phase(self, channel):
@@ -451,8 +452,9 @@ class Tektronix_AFG3252(Instrument):
         Output:
             mode (string) : INTernal or EXTernal
         '''
-        logging.debug(__name__ + ' : Get the reference clock mode.')
-        return str(self._visainstrument.ask(':ROSCillator:SOURce?'))    
+        r = self._visainstrument.ask(':ROSCillator:SOURce?')
+        logging.debug(__name__ + ' : Get the reference clock mode: %s' % r)
+        return r
         
     def do_set_ref_clock_mode(self,val):
         '''
