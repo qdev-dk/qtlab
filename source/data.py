@@ -26,6 +26,7 @@ import re
 import logging
 import copy
 import shutil
+import pickle
 
 from gettext import gettext as _L
 
@@ -235,6 +236,11 @@ class Data(SharedGObject):
             tempfile (bool), default False. If True create a temporary file
                 for the data.
             binary (bool), default True. Whether tempfile should be binary.
+            cache_path, default None. If specified, create a binary temp file
+                             in the specified directory after loading the data.
+                             Or if it already exists, load the data
+                             directly from it.
+            overwrite_cache, default False. Overwrite an existing cache file, if it exists.
             row_mask, optional list of booleans that specifies which rows
                       from an existing data file are loaded. If None, all
                       rows are loaded. All rows beyond len(row_mask) are
@@ -248,8 +254,9 @@ class Data(SharedGObject):
         name = kwargs.get('name', '')
         infile = kwargs.get('infile', True)
         inmem = kwargs.get('inmem', False)
+        self._cache_path = kwargs.get('cache_path', None)
+        self._overwrite_cache = kwargs.get('overwrite_cache', False)
         self._load_row_mask = kwargs.get('row_mask')
-
         self._inmem = inmem
         self._tempfile = kwargs.get('tempfile', False)
         self._temp_binary = kwargs.get('binary', True)
@@ -1080,6 +1087,20 @@ class Data(SharedGObject):
         Load data from file and store internally.
         """
 
+        cache = None
+
+        if self._cache_path != None:
+            cache_fname = os.path.join(self._cache_path, os.path.splitext(self._filename)[0]) + '_tmp.npz'
+            if not self._overwrite_cache:
+                try:
+                    cache = numpy.load(cache_fname)
+                    logging.info('Loaded data from cache file %s.' % cache_fname)
+                    if self._load_row_mask != None:
+                      logging.warn('The row_mask will be ignored since data is loaded from a cache file.')
+                except Exception as e:
+                    logging.info('Failed to load data from cache file %s: %s' % (cache_fname, e))
+
+        # read the header normally from the text file
         try:
             f = file(self.get_filepath(), 'r')
         except:
@@ -1100,6 +1121,10 @@ class Data(SharedGObject):
         blocksize = 0
 
         row_no = -1
+
+        if self._load_row_mask != None:
+            last_row_no_to_parse = self._load_row_mask.nonzero()[0][-1]
+
         for line in f:
 
             line = line.rstrip(' \n\t\r')
@@ -1126,22 +1151,31 @@ class Data(SharedGObject):
 
                 row_no += 1
                 if self._load_row_mask != None:
-                  # skip the line if row_mask[row_no] is False
-                  if not (row_no < len(self._load_row_mask)
-                          and self._load_row_mask[row_no]):
-                    continue
+                  if row_no > last_row_no_to_parse: break # stop parsing
+
+                  if not self._load_row_mask[row_no]:
+                    continue # skip this row
+
+                if cache != None:
+                    # we are done parsing the header and the first data row
+                    # load rest from the cache and stop parsing the text file
+                    self._data = cache['data']
+                    self._comment = pickle.loads(cache['comment_pickled'])
+                    blocksize = cache['blocksize'][0]
+                    nfields = self._data.shape[1]
+                    break
 
                 data.append(fields)
                 blocksize += 1
 
-        logging.debug('Read %u data points.' % (len(data)))
-
         self._add_missing_dimensions(nfields)
         self._count_coord_val_dims()
 
-        self._data = numpy.array(data)
+        if cache == None: self._data = numpy.array(data)
         self._npoints = len(self._data)
         self._inmem = True
+
+        logging.debug('Read %u data points.' % (len(data)))
 
         self._npoints_last_block = blocksize
 
@@ -1149,6 +1183,15 @@ class Data(SharedGObject):
             self._detect_dimensions_size()
         except Exception, e:
             logging.warning('Error while detecting dimension size')
+
+        if cache == None and self._cache_path != None:
+            try:
+                numpy.savez(cache_fname,
+                         data=self._data,
+                         blocksize=numpy.array([blocksize]),
+                         comment_pickled=numpy.array(pickle.dumps(self._comment)))
+            except Exception as e:
+                logging.warn('Failed to save cache file %s: %s' % (cache_fname,e))
 
         return True
 
