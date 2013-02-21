@@ -68,6 +68,7 @@ class DataView():
           self._dimensions = data._dimensions
           self._dimension_indices = data._dimension_indices
           self._source_col = data._source_col
+          self._comments = data._comments
           
           if deep_copy:
             self._masked_data = ma.masked_array(data._masked_data.data, fill_value=data._masked_data.fill_value)
@@ -89,6 +90,8 @@ class DataView():
             n = data.get_name()
             self._source_col = [n for i in range(len(data.get_npoints()))]
 
+          self._comments = data.get_comment(include_row_numbers=True)
+
         except: # probably a sequence of Data objects then
           self._dimensions = data[0].get_dimension_names()
           
@@ -109,15 +112,23 @@ class DataView():
               unmasked[dim] = np.concatenate(unmasked[dim])
           
           # add a column that specifies the source data file
+          lens = [ dat.get_npoints() for dat in data ]
           if source_column_name != None:
             names = [ '%s_(%s)' % (dat.get_name(), dat.get_filename().strip('.dat')) for dat in data ]
-            lens = [ dat.get_npoints() for dat in data ]
             self._source_col = [ [n for jj in range(l)] for n,l in zip(names,lens) ]
-            self._source_col = [ jj for jj in itertools.chain.from_iterable(self._source_col) ] # flatten
+            #self._source_col = [ jj for jj in itertools.chain.from_iterable(self._source_col) ] # flatten
+            self._source_col = list(itertools.chain.from_iterable(self._source_col)) # flatten
           
           # keep only dimensions that could be parsed from all files
           self._dimensions = unmasked.keys()
           unmasked = np.array([unmasked[k] for k in self._dimensions]).T
+
+          # concatenate comments, adjusting row number to correspond to the dataview rows
+          lens = np.array(lens)
+          self._comments = [ dat.get_comment(include_row_numbers=True) for dat in data ]
+          for jj,comments in enumerate(self._comments):
+              comments = [ (rowno + lens[:jj].sum(), commentstr) for rowno,commentstr in comments ]
+          self._comments = list(itertools.chain.from_iterable(self._comments)) # flatten by one level
 
         try:
           self._masked_data = ma.masked_array(unmasked, fill_value=np.NaN)
@@ -163,6 +174,29 @@ class DataView():
         provided Data object visible again).
         '''
         self._masked_data.mask = False
+
+    def get_mask(self):
+        '''
+        Get a vector of booleans indicating which rows are masked.
+        '''
+        return self._masked_data.mask[:,0]
+
+    def get_continuous_ranges(self, masked_ranges=False):
+        '''
+        Returns a list of (start,stop) tuples that indicate continuous ranges of (un)masked data.
+        '''
+        m = self.get_mask() * (-1 if masked_ranges else 1)
+        
+        dm = m[1:] - m[:-1]
+        starts = 1+np.where(dm < 0)[0]
+        stops = 1+np.where(dm > 0)[0]
+
+        if not m[0]:
+            starts = np.concatenate(( [0], starts ))
+        if not m[-1]:
+            stops = np.concatenate(( stops, [len(m)] ))
+
+        return zip(starts, stops)
 
     def set_mask(self, mask):
         '''
@@ -319,19 +353,71 @@ class DataView():
 
         return d
 
-    def add_virtual_dimension(self, name, fn, returns_masked_array=True):
+    def add_virtual_dimension(self, name, fn=None, arr=None, comment_regex=None, returns_masked_array=True, cache_fn_values=False):
         '''
-        Makes the vector fn[self] accessible as self[name].
+        Makes a computed vector accessible as self[name].
+        The computed vector depends on whether fn, arr or comment_regex is specified.
 
-        It is advisable that fn[data].shape == data.shape.
+        It is advisable that the computed vector is of the same length as
+        the real data columns.
         
         kwargs:
+          fn            -- the function applied to the DataView object, i.e self[name] returns fn(self)
+          arr           -- specify the column directly as an array, i.e. self[name] returns arr
+          comment_regex -- for each row, take the value from the last match in a comment, otherwise np.NaN
+
           returns_masked_array -- fn returns a masked array, so that the
-                                  usual arguments passed to get_column are
-                                  automatically handled. Otherwise, no
-                                  masking is done to fn[data]
+                                  usual arguments regarding masking passed to get_column
+                                  are automatically handled. Otherwise, no
+                                  masking is done to fn(data).
+          cache_fn_values -- evaluate fn(self) immediately for the entire (unmasked) array and cache the result
         '''
         logging.debug('adding virtual dimension "%s"' % name)
+
+        assert (fn != None) + (arr != None) + (comment_regex != None) == 1, 'You must specify exactly one of "fn", "arr", or "comment_regex".'
+
+        if arr != None:
+            assert arr.shape == tuple([len(self._masked_data[:,0])]), '"arr" must be a 1D vector of the same length as the real data columns. If you want to do something fancier, specify your own fn.'
+
+            self.add_virtual_dimension(name, lambda dd,arr=arr: ma.masked_array(arr,mask=dd._masked_data.mask[:,0]))
+            return
+
+        if comment_regex != None:
+            # construct the column by parsing the comments
+            vals = np.empty(len(self._masked_data.mask)) + np.nan
+
+            prev_match_on_row = 0
+            prev_val = np.nan
+
+            logging.debug(self._comments)
+
+            for rowno,commentstr in self._comments:
+                m = re.search(comment_regex, commentstr)
+                if m == None: continue
+
+                if len(m.groups()) != 1:
+                  logging.warn('Did not get a unique match (%s) in comment (%d): %s' % (str(groups), rowno, commentstr))
+
+                new_val = float(m.group(1))
+                vals[prev_match_on_row:rowno] = prev_val
+
+                prev_match_on_row = rowno
+                prev_val = new_val
+
+            vals[prev_match_on_row:] = prev_val
+
+            self.add_virtual_dimension(name, arr=vals)
+            return
+
+        if cache_fn_values:
+            old_mask = self.get_mask().copy() # backup the mask
+            self.clear_mask()
+            vals = fn(self)
+            self.mask_rows(old_mask) # restore the mask
+
+            self.add_virtual_dimension(name, arr=vals, cache_fn_values=False)
+            return
+
         self._virtual_dims[name] = {'fn': fn, 'returns_ma': returns_masked_array}
 
     def remove_virtual_dimension(self, name):
