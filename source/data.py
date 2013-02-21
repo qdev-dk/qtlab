@@ -277,7 +277,10 @@ class Data(SharedGObject):
         self._npoints_last_block = 0
         self._npoints_max_block = 0
 
+        # list of (rowno, commentstring) tuples, where
+        # rowno indicates the data row before which comment should appear.
         self._comment = []
+
         self._localtime = time.localtime()
         self._timestamp = time.asctime(self._localtime)
         self._timemark = time.strftime('%H%M%S', self._localtime)
@@ -581,13 +584,13 @@ class Data(SharedGObject):
 
     def add_comment(self, comment):
         '''Add comment to the Data object.'''
-        self._comment.append(comment)
+        self._comment.append([self.get_npoints(), comment])
         if self._file is not None:
             self._file.write('# %s\n' % comment)
 
-    def get_comment(self):
+    def get_comment(self, include_row_numbers=False):
         '''Return the comment for the Data object.'''
-        return self._comment
+        return self._comment if include_row_numbers else [ commentstr for rowno,commentstr in self._comment ]
 
 ### File writing
 
@@ -684,8 +687,8 @@ class Data(SharedGObject):
     def _write_header(self):
         self._file.write('# Filename: %s\n' % self._filename)
         self._file.write('# Timestamp: %s\n\n' % self._timestamp)
-        for line in self._comment:
-            self._file.write('# %s\n' % line)
+        for rowno,line in self._comment:
+            if rowno == 0: self._file.write('# %s\n' % line)
 
         i = 1
         for dim in self._dimensions:
@@ -757,12 +760,20 @@ class Data(SharedGObject):
 
         blockcols = self._get_block_columns()
 
+        non_header_comments = filter(lambda rowno,commentstr: rowno!=0, self._comments)
+        non_header_comments_rowno = np.array([rowno for rowno,commentstr in non_header_comments])
+        non_header_comments_commentstr = [commentstr for rowno,commentstr in non_header_comments]
+
         lastvals = None
-        for vals in self._data:
+        for rowno, vals in enumerate(self._data):
             if type(vals) is numpy.ndarray and lastvals is not None:
                 for i in range(len(vals)):
                     if blockcols[i] and vals[i] != lastvals[i]:
                         self._file.write('\n')
+
+            # write comments preceding the data point, if any.
+            for commentind in np.where(non_header_comments_rowno == rowno):
+                self._file.write('# %s\n' % line)
 
             self._write_data_line(vals)
             lastvals = vals
@@ -1103,7 +1114,7 @@ class Data(SharedGObject):
             # Strip comment
             commentpos = line.find('#')
             if commentpos != -1:
-                self._parse_meta_data(line)
+                self._parse_meta_data(line, line_number = len(data) + (-1 if commentpos > 0 else 0))
                 line = line[:commentpos]
 
             fields = line.split()
@@ -1147,7 +1158,7 @@ class Data(SharedGObject):
         elif name == 'values':
             self._nvalues += 1
 
-    def _parse_meta_data(self, line):
+    def _parse_meta_data(self, line, line_number):
         m = self._META_STEPRE.match(line)
         if m is not None:
             self._dimensions.append({'size': int(m.group(1))})
@@ -1188,7 +1199,7 @@ class Data(SharedGObject):
 
         m = self._META_COMMENTRE.match(line)
         if m is not None:
-            self._comment.append(m.group(1))
+            self._comment.append( (line_number, m.group(1)) )
 
     def _reshape_data(self):
         '''
