@@ -83,16 +83,16 @@ class DataView():
           return
 
         try: # see if a single Data object
-          self._dimension_names = data.get_dimension_names()
+          self._dimensions = data.get_dimension_names()
           unmasked = data.get_data().copy() if deep_copy else data.get_data()
           
           if source_column_name != None:
             n = data.get_name()
-            self._source_col = [n for i in range(len(data.get_npoints()))]
+            self._source_col = [n for i in range(data.get_npoints())]
 
           self._comments = data.get_comment(include_row_numbers=True)
 
-        except: # probably a sequence of Data objects then
+        except Exception as e: # probably a sequence of Data objects then
           self._dimensions = data[0].get_dimension_names()
           
           unmasked = {}
@@ -180,6 +180,12 @@ class DataView():
         Get a vector of booleans indicating which rows are masked.
         '''
         return self._masked_data.mask[:,0]
+
+    def get_comments(self, include_row_numbers=True):
+        '''
+        Return the comments parsed from the data files.
+        '''
+        return self._comments if include_row_numbers else [ commentstr for rowno,commentstr in self._comments ]
 
     def get_continuous_ranges(self, masked_ranges=False):
         '''
