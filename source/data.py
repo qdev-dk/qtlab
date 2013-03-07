@@ -1110,7 +1110,7 @@ class Data(SharedGObject):
         self._dimensions = []
         self._values = []
         self._comment = []
-        data = []
+        data = None
         nfields = 0
 
         self._block_sizes = []
@@ -1130,7 +1130,7 @@ class Data(SharedGObject):
             line = line.rstrip(' \n\t\r')
 
             # Count blocks
-            if len(line) == 0 and len(data) > 0:
+            if len(line) == 0 and data != None:
                 self._block_sizes.append(blocksize)
                 if blocksize > self._npoints_max_block:
                     self._npoints_max_block = blocksize
@@ -1139,7 +1139,7 @@ class Data(SharedGObject):
             # Strip comment
             commentpos = line.find('#')
             if commentpos != -1:
-                self._parse_meta_data(line, line_number = len(data) + (-1 if commentpos > 0 else 0))
+                self._parse_meta_data(line, line_number = (0 if data==None else len(data)) + (-1 if commentpos > 0 else 0))
                 line = line[:commentpos]
 
             fields = line.split()
@@ -1165,17 +1165,31 @@ class Data(SharedGObject):
                     nfields = self._data.shape[1]
                     break
 
-                data.append(fields)
+                if data == None: # allocate a buffer for the data
+                    # estimate the (max) number of data rows from the file size
+                    n_lines_estimate = 1 + os.path.getsize(self.get_filepath()) / len(line)
+                    data = numpy.empty((n_lines_estimate, len(fields))) + numpy.nan
+
+                if row_no >= len(data):
+                    logging.warn('Failed to estimate the number of data points correctly. Allocating more space...')
+                    data_larger = numpy.empty(( int(numpy.ceil( 1.5*len(data) )), len(fields) )) + numpy.nan
+                    data_larger[:len(data),:] = data[:,:]
+                    data = data_larger
+
+                data[row_no,:] = numpy.array(fields)
                 blocksize += 1
 
         self._add_missing_dimensions(nfields)
         self._count_coord_val_dims()
 
-        if cache == None: self._data = numpy.array(data)
+        if cache == None:
+          logging.info('Finished reading %d data points. Data buffer size was %d points.' % (row_no, len(data)))
+          self._data = data[:1+row_no,:]
+
         self._npoints = len(self._data)
         self._inmem = True
 
-        logging.debug('Read %u data points.' % (len(data)))
+        logging.debug('Read %u data points.' % (len(self._data)))
 
         self._npoints_last_block = blocksize
 
