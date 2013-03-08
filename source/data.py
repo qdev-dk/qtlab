@@ -1168,6 +1168,9 @@ class Data(SharedGObject):
                 if data == None: # allocate a buffer for the data
                     # estimate the (max) number of data rows from the file size
                     n_lines_estimate = 1 + os.path.getsize(self.get_filepath()) / len(line)
+                    if self._load_row_mask != None: # We may not need that much space
+                        n_lines_estimate = numpy.min(( n_lines_estimate,
+                                                       self._load_row_mask.astype(numpy.bool).sum() ))
                     data = numpy.empty((n_lines_estimate, len(fields))) + numpy.nan
 
                 if row_no >= len(data):
