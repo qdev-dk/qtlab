@@ -123,12 +123,13 @@ class DataView():
           self._dimensions = unmasked.keys()
           unmasked = np.array([unmasked[k] for k in self._dimensions]).T
 
-          # concatenate comments, adjusting row number to correspond to the dataview rows
+          # concatenate comments, adjusting row numbers from Data object rows to the corresponding dataview rows
           lens = np.array(lens)
           self._comments = [ dat.get_comment(include_row_numbers=True) for dat in data ]
+          all_comments = []
           for jj,comments in enumerate(self._comments):
-              comments = [ (rowno + lens[:jj].sum(), commentstr) for rowno,commentstr in comments ]
-          self._comments = list(itertools.chain.from_iterable(self._comments)) # flatten by one level
+              all_comments.append([ (rowno + lens[:jj].sum(), commentstr) for rowno,commentstr in comments ])
+          self._comments = list(itertools.chain.from_iterable(all_comments)) # flatten by one level
 
         try:
           self._masked_data = ma.masked_array(unmasked, fill_value=np.NaN)
@@ -412,6 +413,7 @@ class DataView():
                 prev_match_on_row = rowno
                 prev_val = new_val
 
+            logging.debug('Setting value for (remaining) rows %d: = %g' % (prev_match_on_row, prev_val))
             vals[prev_match_on_row:] = prev_val
 
             self.add_virtual_dimension(name, arr=vals)
