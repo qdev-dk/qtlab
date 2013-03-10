@@ -1139,7 +1139,7 @@ class Data(SharedGObject):
             # Strip comment
             commentpos = line.find('#')
             if commentpos != -1:
-                self._parse_meta_data(line, line_number = (0 if data==None else len(data)) + (-1 if commentpos > 0 else 0))
+                self._parse_meta_data(line, line_number = row_no+1 + (-1 if commentpos > 0 else 0))
                 line = line[:commentpos]
 
             fields = line.split()
