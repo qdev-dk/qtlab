@@ -395,17 +395,19 @@ class DataView():
             prev_match_on_row = 0
             prev_val = np.nan
 
-            logging.debug(self._comments)
+            #logging.debug(self._comments)
 
             for rowno,commentstr in self._comments:
                 m = re.search(comment_regex, commentstr)
                 if m == None: continue
+                #logging.debug('Match on row %d: "%s"' % (rowno, commentstr))
 
                 if len(m.groups()) != 1:
                   logging.warn('Did not get a unique match (%s) in comment (%d): %s' % (str(groups), rowno, commentstr))
 
                 new_val = float(m.group(1))
                 vals[prev_match_on_row:rowno] = prev_val
+                logging.debug('Setting value for rows %d:%d = %g' % (prev_match_on_row, rowno, prev_val))
 
                 prev_match_on_row = rowno
                 prev_val = new_val
