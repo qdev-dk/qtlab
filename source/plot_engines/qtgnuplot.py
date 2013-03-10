@@ -287,9 +287,10 @@ class _QTGnuPlot():
             - filepath: file path + name
             - font: font name
             - fontsize: font size
+            - size: string specifying the image size (e.g. '20cm,15cm')
         '''
 
-        sizestring = ' size '+size if size!=None else ''
+        sizestring = ' size '+str(size) if size!=None else ''
         fontstring = '"%s, %s"' % (font, fontsize)
         term = 'postscript eps %s color enhanced %s' % (sizestring, fontstring)
         self.save_as_type(term, 'eps', filepath=filepath, **kwargs)
