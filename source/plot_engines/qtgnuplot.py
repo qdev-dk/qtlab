@@ -295,7 +295,7 @@ class _QTGnuPlot():
         term = 'postscript eps %s color enhanced %s' % (sizestring, fontstring)
         self.save_as_type(term, 'eps', filepath=filepath, **kwargs)
 
-    def save_png(self, filepath=None, font='', transparent=False, **kwargs):
+    def save_png(self, filepath=None, font='', transparent=False, size=None, **kwargs):
         '''
         Save png version of the plot.
 
@@ -307,6 +307,7 @@ class _QTGnuPlot():
                 - False: no transparency
                 - True: white will be transparent
                 - Color spec (e.g. '#808080'): the transparent color
+            - size: tuple specifying the image size in pixels (default (1024,768))
         '''
 
         if transparent is False:
@@ -316,7 +317,9 @@ class _QTGnuPlot():
                 transparent = '#ffffff'
             transparent = 'transparent %s' % transparent
 
-        self.save_as_type('png %s %s size 1024,768' % (font, transparent),
+        if size == None: size = (1024, 768)
+
+        self.save_as_type('png %s %s size %u,%u' % (font, transparent, size[0], size[1]),
                 'png', filepath=filepath, **kwargs)
 
     def save_jpeg(self, filepath=None, **kwargs):
