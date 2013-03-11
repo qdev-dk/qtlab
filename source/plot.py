@@ -247,9 +247,12 @@ class Plot(SharedGObject):
         '''Enable/disable tics on right x axis.'''
         self.set_property('x2tics', val, update=update)
 
-    def set_ytics(self, val, update=True):
+    def set_ytics(self, val, update=True, options=None):
         '''Enable/disable tics on bottom y axis.'''
-        self.set_property('ytics', val, update=update)
+        if options == None or not val:
+            self.set_property('ytics', val, update=update)
+        else:
+            self.set_property('ytics_with_options', str(options), update=update)
 
     def set_y2tics(self, val, update=True):
         '''Enable/disable tics on top y axis.'''

@@ -115,6 +115,7 @@ class _QTGnuPlot():
         'xtics': 'set xtics\n',
         'x2tics': 'set x2tics\n',
         'ytics': 'set ytics\n',
+        'ytics_with_options': 'set ytics %s\n',
         'y2tics': 'set y2tics\n',
         'ztics': 'set ztics\n',
 
