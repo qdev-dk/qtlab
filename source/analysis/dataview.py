@@ -45,7 +45,7 @@ class DataView():
     class for post-processing measurement data
     '''
 
-    def __init__(self, data, deep_copy=True, source_column_name='data_source', **kwargs):
+    def __init__(self, data, deep_copy=False, source_column_name='data_source', **kwargs):
         '''
         Create a new view of an existing data object for post-processing.
         The original data object will not be modified.
@@ -91,6 +91,9 @@ class DataView():
             self._source_col = [n for i in range(data.get_npoints())]
 
           self._comments = data.get_comment(include_row_numbers=True)
+
+        except MemoryError as e:
+          raise e
 
         except Exception as e: # probably a sequence of Data objects then
           self._dimensions = data[0].get_dimension_names()
