@@ -153,6 +153,25 @@ class Agilent_N9928A(Instrument):
         '''
         self._visainstrument.write('DISP:WIND:SPL %s' % param)
 
+    def get_multi_trace(self):
+      '''
+      Get the multitrace window configuration.
+      Used in modes: NA.
+
+      Input:
+          None
+
+      Output:
+           param (str): D1 - x 1
+                         D2 - x 2
+                         D12H - x2H
+                         D1123 - x3H (NA mode only)
+                         D12_34 - x4 (NA mode only) 
+      '''
+      logging.debug(__name__ + ' : Getting the window configuration.')
+      return str(self._visainstrument.ask('DISPlay:WINDow:SPLit?'))
+
+ 
     def select_trace(self,trace):
         '''
         Select (make active) the current trace.
@@ -620,12 +639,25 @@ class Agilent_N9928A(Instrument):
         self.get_source_power()
         self.get_source_power_mode()
 
-        # need to enable multitrace before getting these parameters. Otherwise, you get error 28 on the screen.
-        self.set_multi_trace()
-        for i in range(1,5):
+        # Get the measurement and smoothing parameters for the windows on the screen.
+        window_config  = self.get_multi_trace()
+        if window_config == 'D1':
+          for i in range(1,2):
+            self.get('ch%d_smoothing_mode' % i)
+            self.get('ch%d_current_measurement' % i)       
+        elif window_config in ['D2', 'D12H']:
+          for i in range(1,3):
             self.get('ch%d_smoothing_mode' % i)
             self.get('ch%d_current_measurement' % i)
-
+        elif window_config == 'D1123':
+          for i in range(1,4):
+            self.get('ch%d_smoothing_mode' % i)
+            self.get('ch%d_current_measurement' % i)
+        elif window_config == 'D12_34':
+          for i in range(1,5):
+            self.get('ch%d_smoothing_mode' % i)
+            self.get('ch%d_current_measurement' % i)
+                   
     def do_get_operating_mode(self):
         '''
         Reads the averaging of the signal from the instrument
@@ -744,23 +776,24 @@ class Agilent_N9928A(Instrument):
         Output:
             len (int) : averaging length
         '''
-        logging.debug(__name__ + ' : get averaging mode')
+        logging.debug(__name__ + ' : get current measurement mode')
         return str(self._visainstrument.ask(':CALC:PAR%u:DEF?' % channel))
 
-    def do_set_current_measurement(self, par, mode):
+    def do_set_current_measurement(self, mode, channel):
         '''
         Set the current measurement.  Options depend on which mode (CAT, NA, VVM) is currently selected.
         If param/chan is 2,3,4 then an appropriate multitrace configuration must be created first.
 
         Input:
             len (int) : 
-                parameter/channel (int): 1,2,3,4
+                channel (int): 1,2,3,4
                 mode (str): see format map in context help.
         Output:
             None
         '''
-        logging.debug(__name__ + ' : set averaging mode to %f' % val)
-        self._visainstrument.write(':CALC:PAR%u:DEF %s' % (par, mode))
+        logging.debug(__name__ + ' : set current measurment mode to %s' % mode)
+        self.select_trace(channel)
+        self._visainstrument.write(':CALC:PAR%u:DEF %s' % (channel, mode))
 
     def do_get_smoothing_mode(self,channel):
         '''
