@@ -210,8 +210,9 @@ class DataView():
 
     def set_mask(self, mask):
         '''
-        Set an arbitrary mask for the data. Should have the same dimension
-        as the data, or simply True/False for masking/unmasking all data.
+        Set an arbitrary mask for the data. Should be a vector of booleans of
+        the same length as the number of data points.
+        Alternatively, simply True/False masks/unmasks all data.
 
         See also mask_rows().
         '''
@@ -224,19 +225,15 @@ class DataView():
           else:
             m = np.zeros(self._masked_data.shape, dtype=np.bool)
         except:
-            m = mask
+            m = np.zeros(self._masked_data.shape, dtype=np.bool)
+            m[mask,:] = True
         self._masked_data.mask = m
 
 
-    def mask_rows(self, row_mask, or_with_old_mask=False, and_with_old_mask=False, unmask_instead=False):
+    def mask_rows(self, row_mask, unmask_instead=False):
         '''
         Mask rows in the data. row_mask can be a slice or a boolean vector with
-        length equal to the number of previously unmasked rows, unless either
-
-        or_with_old_mask  -- mask rows where either old or new mask is True
-        and_with_old_mask -- mask rows where both old and new mask are True
-
-        is set, in which case row_mask should be equal to the original data length.
+        length equal to the number of previously unmasked rows.
 
         The old mask is determined from the mask of the first column.
 
@@ -245,19 +242,21 @@ class DataView():
           # ignore points where source current exceeds 1 uA.
           d.mask_rows(np.abs(d['I_source']) > 1e-6)
         '''
-        if or_with_old_mask and and_with_old_mask:
-            logging.warn('You cannot both AND and OR with the old mask.')
-
         old_mask = self._masked_data.mask[:,0]
-        if or_with_old_mask or and_with_old_mask:
-            assert isinstance(row_mask, slice), 'or/and with old mask not supported with a slice'
-            assert row_mask.shape == old_mask.shape, 'The length of the new mask must be equal to the number of rows in the data, if you AND or OR with the old mask.'
-            logical_opp = np.logical_or if or_with_old_mask else np.logical_and
-            self._masked_data.mask[logical_opp(old_mask, row_mask),:] = True
-        else:
-            assert row_mask.shape == ((~old_mask).sum(),), 'The length of the new mask must be equal to the number of previously unmasked rows.'
-            new_masked_entries = (np.arange(len(old_mask),dtype=np.int)[~old_mask])[row_mask]
-            self._masked_data.mask[new_masked_entries,:] = True
+        n = (~old_mask).astype(np.int).sum() # no. of previously unmasked entrie
+        #logging.debug("previously unmasked rows = %d" % n)
+
+        # new mask for the previously unmasked rows
+        new_mask = np.empty(n, dtype=np.bool); new_mask[:] = unmask_instead
+        new_mask[row_mask] = (not unmask_instead)
+        #logging.debug("new_mask.sum() = %d" % new_mask.sum())
+
+        # combine the old and new masks
+        full_mask = old_mask.copy()
+        full_mask[~old_mask] = new_mask
+
+        logging.debug("# of masked/unmasked rows = %d/%d" % (full_mask.astype(np.int).sum(), (~full_mask).astype(np.int).sum()))
+        self.set_mask(full_mask)
 
 
     def divide_into_sweeps(self, sweep_dimension, use_sweep_direction = None):
