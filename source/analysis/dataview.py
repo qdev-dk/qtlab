@@ -227,9 +227,10 @@ class DataView():
             m = mask
         self._masked_data.mask = m
 
-    def mask_rows(self, row_mask, or_with_old_mask=False, and_with_old_mask=False):
+
+    def mask_rows(self, row_mask, or_with_old_mask=False, and_with_old_mask=False, unmask_instead=False):
         '''
-        Mask rows in the data. row_mask should be a boolean vector with a
+        Mask rows in the data. row_mask can be a slice or a boolean vector with
         length equal to the number of previously unmasked rows, unless either
 
         or_with_old_mask  -- mask rows where either old or new mask is True
@@ -249,6 +250,7 @@ class DataView():
 
         old_mask = self._masked_data.mask[:,0]
         if or_with_old_mask or and_with_old_mask:
+            assert isinstance(row_mask, slice), 'or/and with old mask not supported with a slice'
             assert row_mask.shape == old_mask.shape, 'The length of the new mask must be equal to the number of rows in the data, if you AND or OR with the old mask.'
             logical_opp = np.logical_or if or_with_old_mask else np.logical_and
             self._masked_data.mask[logical_opp(old_mask, row_mask),:] = True
