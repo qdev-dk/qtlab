@@ -260,30 +260,52 @@ class DataView():
             self._masked_data.mask[new_masked_entries,:] = True
 
 
-    def divide_into_sweeps(self, sweep_dimension):
+    def divide_into_sweeps(self, sweep_dimension, use_sweep_direction = None):
         '''
-        Divide the rows into "sweeps" based on changing direction of column 'sweep_dimension'.
+        Divide the rows into "sweeps" based on a changing value of column 'sweep_dimension'
+        or based on changing direction of 'sweep_dimension'. If use_sweep_direction is None,
+        the method tries to figure out which one is more reasonable.
+
+        Sequences of four or more points with a constant value of 'sweep_dimension' are also
+        considered a sweep.
         
         Returns a sequence of tuples indicating the start and end of each sweep.
         '''
         sdim = self[sweep_dimension]
         dx = np.sign(sdim[1:] - sdim[:-1])
-        change_in_sign = (1 + np.array(np.where(dx[1:] * dx[:-1] < 0),dtype=np.int).reshape((-1))).tolist()
+
+        if use_sweep_direction == None:
+          use_sweep_direction = ( np.abs(dx).astype(np.int).sum() > len(dx)/4. )
+
+        if use_sweep_direction:
+          logging.info("Assuming '%s' is swept." % sweep_dimension)
+        else:
+          logging.info("Assuming '%s' stays constant within a sweep." % sweep_dimension)
+
+        if use_sweep_direction:
+          change_in_sign = (1 + np.array(np.where(dx[1:] * dx[:-1] < 0),dtype=np.int).reshape((-1))).tolist()
+
+          # the direction changing twice in a row means that sweeps are being done repeatedly
+          # in the same direction.
+          for i in range(len(change_in_sign)-1, 0, -1):
+            if change_in_sign[i]-change_in_sign[i-1] == 1: del change_in_sign[i-1]
+
+          if len(change_in_sign) == 0: return np.array([[0, len(sdim)]])
+
+          start_indices = np.concatenate(([0], change_in_sign))
+          stop_indices  = np.concatenate((change_in_sign, [len(sdim)]))
+
+          sweeps = np.concatenate((start_indices, stop_indices)).reshape((2,-1)).T
+        else:
+          change_in_sdim = np.array(np.where(dx != 0)).reshape((-1))
+          if len(change_in_sdim) == 0: return np.array([[0, len(sdim)]])
+
+          start_indices = np.concatenate(([0], change_in_sdim))
+          stop_indices  = np.concatenate((change_in_sdim, [len(sdim)]))
         
-        # the direction changing twice in a row means that sweeps are being done repeatedly
-        # in the same direction.
-        for i in range(len(change_in_sign)-1, 0, -1):
-          if change_in_sign[i]-change_in_sign[i-1] == 1: del change_in_sign[i-1]
+          sweeps = np.concatenate((start_indices, stop_indices)).reshape((2,-1)).T
 
-        if len(change_in_sign) == 0: return np.array([[0, len(sdim)]])
-
-        start_indices = np.concatenate(([0], change_in_sign))
-        stop_indices  = np.concatenate((change_in_sign, [len(sdim)]))
-
-        sweeps = np.concatenate((start_indices, stop_indices)).reshape((2,-1)).T
-        
         return sweeps
-        
 
     def mask_sweeps(self, sweep_dimension, sl, unmask_instead=False):
         '''
