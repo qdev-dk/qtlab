@@ -60,7 +60,7 @@ class Agilent_MSO9404A(Instrument):
         
         # Timebase parameters 
         self.add_parameter('timebase_range',
-            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='s', minval=5E-11, maxval=20, type=types.FloatType)
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='s', minval=5E-11, maxval=200, type=types.FloatType)
 
         self.add_parameter('timebase_scale',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='s/div', minval=5E-12, maxval=20, type=types.FloatType)
