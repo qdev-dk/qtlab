@@ -1,6 +1,5 @@
 # bluefors_log_reader.py class, to perform the communication between the Wrapper and the device
-# Pieter de Groot <pieterdegroot@gmail.com>, 2008
-# Martijn Schaafsma <qtlab@mcschaafsma.nl>, 2008
+# Joonas Govenius <joonas.goveius@aalto.fi>, 2013
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,11 +29,11 @@ import time
 
 class bluefors_log_reader(Instrument):
     '''
-    This is the driver for the Agilent 34410A Signal Genarator
+    This is a driver for reading the Bluefors dillution fridge log files.
 
     Usage:
     Initialize with
-    <name> = instruments.create('<name>', 'bluefors_log_reader', address='<GBIP address>, reset=<bool>')
+    <name> = instruments.create('<name>', 'bluefors_log_reader', address='<path_to_log_files>', reset=<bool>)
     '''
 
     def __init__(self, name, address, reset=False):
@@ -43,7 +42,7 @@ class bluefors_log_reader(Instrument):
 
         Input:
           name (string)    : name of the instrument
-          address (string) : GPIB address
+          address (string) : path to log files
           reset (bool)     : resets to default values, default=False
         '''
         logging.info(__name__ + ' : Initializing instrument bluefors_log_reader')
