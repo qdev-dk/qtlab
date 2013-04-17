@@ -88,7 +88,7 @@ class Tektronix_AFG3252(Instrument):
 
         self.add_parameter('amplitude', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
-            channels=(1, 2), minval=0, maxval=2.5, units='V', channel_prefix='ch%d_')
+            channels=(1, 2), minval=0, maxval=5., units='V', channel_prefix='ch%d_')
 
         self.add_parameter('offset', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
@@ -98,9 +98,9 @@ class Tektronix_AFG3252(Instrument):
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
             channels=(1, 2), minval=1E-6, maxval=240E6, units='Hz', channel_prefix='ch%d_')
 
-        self.add_parameter('output_impedance', type=types.FloatType,
+        self.add_parameter('load_impedance', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
-            channels=(1, 2), minval=1, maxval=1E4, units='Ohm', channel_prefix='ch%d_')
+            channels=(1, 2), minval=1, units='Ohm', channel_prefix='ch%d_')
 
         self.add_parameter('phase', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
@@ -188,7 +188,7 @@ class Tektronix_AFG3252(Instrument):
             self.get('ch%d_polarity' % i)
             self.get('ch%d_output' % i)
             self.get('ch%d_polarity' % i)
-            self.get('ch%d_output_impedance' % i)
+            self.get('ch%d_load_impedance' % i)
             self.get('ch%d_phase' % i)
 
     def clear_waveforms(self):
@@ -291,18 +291,20 @@ class Tektronix_AFG3252(Instrument):
         Output:
             amplitude (float) : the amplitude of the signal in Volts
         '''
-        logging.debug(__name__ + ' : Get amplitude of channel %s from instrument'
-            % channel)
-        return float(self._visainstrument.ask('SOUR%s:VOLT:LEV:IMM:AMPL?' % channel))
+        r = self._visainstrument.ask('SOUR%s:VOLT:LEV:IMM:AMPL?' % channel)
+        logging.debug(__name__ + ' : Get amplitude of channel %s from instrument: %s'
+            % (channel, r))
+        return float(r)/2.
 
 
 
     def do_set_amplitude(self, amp, channel):
         '''
         Sets the amplitude of the designated channel of the instrument.
+        NOTE: Assumes that the AFG returns pk-to-pk amplitude (which it always does in the ARB mode)!
 
         Input:
-            amp (float)   : amplitude in Volts. NOTE: The AFG screen shows pk-to-pk amplitude!
+            amp (float)   : amplitude in Volts.
             channel (int) : 1 or 2, the number of the designated channel
 
         Output:
@@ -403,7 +405,7 @@ class Tektronix_AFG3252(Instrument):
 
 
 
-    def do_get_output_impedance(self, channel):
+    def do_get_load_impedance(self, channel):
         '''
         Reads the output impedance of channel 1 or 2.
 
@@ -417,7 +419,7 @@ class Tektronix_AFG3252(Instrument):
 
 
 
-    def do_set_output_impedance(self, impedance, channel):
+    def do_set_load_impedance(self, impedance, channel):
         '''
         Sets the output impedance of ch1 or ch2.
 
@@ -428,8 +430,13 @@ class Tektronix_AFG3252(Instrument):
         Output:
             None
         '''
-        logging.debug(__name__ + ' : Set offset of channel %s to %.6f' % (channel, impedance))
-        self._visainstrument.write('OUTP%s:IMP %.6f' % (channel, impedance))
+        imp = ("%.2e" % impedance) if impedance <= 1e4 else 'INF'
+        
+        if impedance > 1e4 and impedance < np.inf:
+          logging.warn('%.3e Ohm load impedance not supported. Assuming you meant infinite load impedance. Use np.inf if you want to avoid this message.')
+        
+        logging.debug(__name__ + ' : Set offset of channel %s to %s' % (channel, imp))
+        self._visainstrument.write('OUTP%s:IMP %s' % (channel, imp))
 
 
 
