@@ -935,11 +935,11 @@ class Instrument(SharedGObject):
                 return None
 
         if 'minval' in p and value < p['minval']:
-            logging.warn('Trying to set too small value: %s' % value)
+            logging.warn('Trying to set "%s" too small: %s' % (name, value))
             return None
 
         if 'maxval' in p and value > p['maxval']:
-            logging.warn('Trying to set too large value: %s' % value)
+            logging.warn('Trying to set "%s" too large: %s' % (name, value))
             return None
 
         if 'base_name' in p:
@@ -951,7 +951,7 @@ class Instrument(SharedGObject):
         if 'maxstep' in p and p['maxstep'] is not None:
             curval = p['value']
             if curval is None:
-                logging.warning('Current value not available, ignoring maxstep')
+                logging.warning('Current "%s" value not available, ignoring maxstep', name)
                 curval = value + 0.01 * p['maxstep']
 
             delta = curval - value
@@ -1012,8 +1012,7 @@ class Instrument(SharedGObject):
         '''
 
         if self._locked:
-            logging.warning('Trying to set value of locked instrument (%s)',
-                    self.get_name())
+            logging.warning('Trying to set "%s" of locked instrument (%s)', name, self.get_name())
             return False
 
         if Instrument.USE_ACCESS_LOCK:
