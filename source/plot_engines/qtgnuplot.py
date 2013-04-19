@@ -121,6 +121,7 @@ class _QTGnuPlot():
 
         'formatx': 'set format x "%s"\n',
         'formaty': 'set format y "%s"\n',
+        'formaty2': 'set format y2 "%s"\n',
 
         'xdata': 'set xdata %s\n',
         'x2data': 'set x2data %s\n',
