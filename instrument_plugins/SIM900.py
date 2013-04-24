@@ -56,7 +56,7 @@ class SIM900(Instrument):
     # This is crucial, if you set this too low (e.g. 10ms) the SIM will simply stop responding sooner or later
     #   10 ms --> SIM will stop responding after a few commands sent at this rate
     #   50 ms --> may be OK (worked for a few hundred commands, at least)
-    self._min_time_between_commands = 0.080  # in seconds
+    self._min_time_between_commands = 0.150  # in seconds
 
     for port in range(1,9):
       self._clear_output_buffer(port)
@@ -79,7 +79,7 @@ class SIM900(Instrument):
     self.add_parameter('battery_status', type=types.StringType, flags=Instrument.FLAG_GET,
                         channels=range(1,9), channel_prefix='port%d_')
 
-    self._ramp_stepsize = 0.02
+    self._ramp_stepsize = 0.050
     self._ramp_delaytime = self._min_time_between_commands
     self.add_parameter('ramp_stepsize', type=types.FloatType,
         flags=Instrument.FLAG_GETSET,
