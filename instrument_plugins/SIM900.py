@@ -54,9 +54,11 @@ class SIM900(Instrument):
     self._last_communication_time = time.time()
     
     # This is crucial, if you set this too low (e.g. 10ms) the SIM will simply stop responding sooner or later
-    #   10 ms --> SIM will stop responding after a few commands sent at this rate
-    #   50 ms --> may be OK (worked for a few hundred commands, at least)
-    self._min_time_between_commands = 0.150  # in seconds
+    #   10 ms  --> SIM will stop responding after a few commands sent at this rate
+    #   50 ms  --> may be OK (worked for a few hundred commands)
+    #   150 ms --> problems still occur ~daily/weekly
+    #   200 ms --> seems OK
+    self._min_time_between_commands = 0.200  # in seconds
 
     for port in range(1,9):
       self._clear_output_buffer(port)
@@ -79,7 +81,7 @@ class SIM900(Instrument):
     self.add_parameter('battery_status', type=types.StringType, flags=Instrument.FLAG_GET,
                         channels=range(1,9), channel_prefix='port%d_')
 
-    self._ramp_stepsize = 0.050
+    self._ramp_stepsize = 0.080
     self._ramp_delaytime = self._min_time_between_commands
     self.add_parameter('ramp_stepsize', type=types.FloatType,
         flags=Instrument.FLAG_GETSET,
@@ -283,7 +285,7 @@ class SIM900(Instrument):
         if np.abs(new_voltage - target_voltage) < 0.0005:
           return # success
         logging.warn('Attempt #%d to set voltage to %g for port %d failed.' % (attempt, target_voltage, port))
-        time.sleep(.5 (1+attempt))
+        time.sleep(.5*(1+attempt))
 
     logging.warn('The desired output voltage %g for port %d was not set!' % (target_voltage, port))
 
@@ -337,7 +339,7 @@ class SIM900(Instrument):
         if bool(new_val) == bool(val):
           return # success
         logging.warn('Attempt #%d to set output = %s for port %d failed.' % (attempt, str(val), port))
-        time.sleep(.5 (1+attempt))
+        time.sleep(.5*(1+attempt))
 
     logging.warn('The desired output state %s for port %d was not set!' % (str(val), port))
 
