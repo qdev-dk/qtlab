@@ -231,7 +231,7 @@ class SIM900(Instrument):
     self._visainstrument.timeout = old_timeout
     
   def _clear_output_buffer(self, port):
-    for j in range(4):
+    for j in range(8):
       resp = self._ask('GETN? %s,80' % port)
       if len(resp) == 5:   # we expect "#3000" if there is nothing in the buffer
         return
@@ -247,7 +247,7 @@ class SIM900(Instrument):
             # self._write('FLSO %s' % port)
             # if j%10 == 0: logging.debug(__name__ + ' : output bytes waiting for port %s: %s' % (port, bytes_waiting))
     
-    raise Exception('Could not clear output buffer. Still getting: %s' % s)
+    raise Exception('Could not clear output buffer. Still getting: %s' % resp)
 
   def _wait_until_input_read(self, port):
     for j in range(4):
