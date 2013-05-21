@@ -205,7 +205,7 @@ class SIM900(Instrument):
     for p in ports:
       self._wait_until_input_read(p)
       self._clear_output_buffer(p)
-      baud_rate = 38400
+      baud_rate = 9600 #38400
       self._write("SNDT %d,'BAUD %d'" % (p, baud_rate))
       self._write("BAUD %d,%d" % (p, baud_rate))
 
