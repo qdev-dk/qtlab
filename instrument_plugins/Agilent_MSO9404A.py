@@ -21,7 +21,10 @@ import visa
 import types
 import logging
 import numpy as np
+from scipy import interpolate
 import struct
+import qt
+import time
 
 class Agilent_MSO9404A(Instrument):
     '''
@@ -239,7 +242,7 @@ class Agilent_MSO9404A(Instrument):
         Output:
             None
         '''
-        logging.info(__name__ + ' : run continuously.')
+        logging.debug(__name__ + ' : run continuously.')
         self._visainstrument.write(':RUN')
 
 
@@ -270,23 +273,127 @@ class Agilent_MSO9404A(Instrument):
         Output:
             None
         '''
-        logging.info(__name__ + ' : Stop acquuiring data')
+        logging.debug(__name__ + ' : Stop acquiring data')
         self._visainstrument.write(':STOP')
 
 
     def single(self):
         '''
-        Resets the instrument to default values
+        Triggers a single acquisition (without blocking execution).
+        '''
+        logging.debug(__name__ + ' : Make a single acquisition.')
+        
+        self._visainstrument.write(':SINGLE')
+
+
+    def acquire_and_return_data(self, channels, resample=False):
+        '''
+        Resets averaging, then
+        triggers enough acquisition until average count has been reached.
+        Blocks execution until data is returned.
 
         Input:
-            None
+            channels (sequence): channels for which data is returned
+            resample:
+                resample the data to the desired time interval/number of points
+                (scope often returns more points than you request)
 
         Output:
             None
         '''
-        logging.info(__name__ + ' : Make a single acquisition.')
-        self._visainstrument.write(':SINGLE')
+        if self.get_acquire_average_mode() == 'ON':
+          self.reset_averaging()
+          target_avg_count = self.get_acquire_average_count()
+        else:
+          target_avg_count = 1
+        
+        total_duration = self.get_timebase_range()
+        
+        self.run()
+        start_time = time.time()
 
+        qt.msleep(1.)
+        avg_count = 0
+        
+        for wait_attempt in range(10):
+          # get the data from the scope
+          try:
+            # make sure scope digitize has actually completed
+            if wait_attempt == 0:
+              extra_sleep_factor = 1.
+            else:
+              extra_sleep_factor = 2 if avg_count == 0 else (1.1 * target_avg_count / float(avg_count))
+            
+            sleeping = .5 + 1.15*total_duration*(target_avg_count - avg_count) * extra_sleep_factor
+            logging.debug('Expecting measurement to be done in %g seconds. Sleeping until then.' % sleeping)
+            qt.msleep( sleeping )
+
+            avg_count = self.get_waveform_count()
+            complete = (avg_count >= target_avg_count)
+            if not complete: raise Exception( 'Acquisition taking longer (already %g s) than expected (%g s).' % (time.time() - start_time, total_duration*target_avg_count) )
+            self.stop()
+            break
+
+          except Exception as e:
+            if str(e) == 'Human abort': raise e
+            if wait_attempt > 0:
+              logging.warn('Sleeping more... Exception was: %s' % str(e)) 
+            else:
+              logging.debug('Sleeping more... Exception was: %s' % str(e)) 
+            
+        logging.debug('Data digitized. Now fetching it from the scope.')
+        pres = []
+        wavs = []
+        for ch in channels:
+          self.set_waveform_source('CHAN%u' % ch)
+          pre, wav = self.get_waveform()
+          pres.append(pre)
+          wavs.append(wav)
+      
+          logging.debug('Got %d pts for channel %s' % (len(wavs[-1]), ch))
+
+        if not complete:
+          raise Exception('Failed to reach %d averages as requested. (Got up to %d.)' % (target_avg_count, avg_count))
+
+        if not resample:
+          return [ {'pre': p, "wav": w } for p,w in zip(pres, wavs) ]
+
+        # often the scope returns a longer time segment than you ask for...
+        # resample the returned data to match the specified timebase and number of points
+        target_no_of_pts = self.get_acquire_points()
+        new_time_axis = np.linspace(0, total_duration, target_no_of_pts)
+        epsilon_t = total_duration / float(target_no_of_pts) / 10. # negligible amount of time (for == comparisons)
+
+        assert (np.abs(self.get_timebase_position()) < epsilon_t
+                and self.get_timebase_reference().lower() == 'left'), 'resample only implemented for timebase ref = LEFT and position = 0.'
+        
+        for i in range(len(wavs)):
+          scope_time_axis = self.get_time_axis(pres[i])
+          returned_no_of_pts = len(wavs[i])
+          
+          if (returned_no_of_pts != target_no_of_pts
+              or np.abs(scope_time_axis[0]) > epsilon_t
+              or np.abs(scope_time_axis[-1] - total_pattern_duration) > epsilon_t):
+            first_pt = np.argmin(np.abs(scope_time_axis))
+            last_pt = np.argmin(np.abs(scope_time_axis - total_duration))
+            
+            # resample
+            wavs[i] = interpolate.interp1d(scope_time_axis, wavs[i], kind='linear')(new_time_axis)
+            
+            logging.debug("Resamples channel %s waveform from %d to %d pts." % (channels[i], returned_no_of_pts, len(wavs[i])))
+
+        return [ {'pre': p, "wav": w, 'time_axis': new_time_axis } for p,w in zip(pres, wavs) ]
+
+    def reset_averaging(self):
+      '''
+      Clears old averages.
+      '''
+      assert self.get_acquire_average_mode() == 'ON', 'Averaging is off!'
+
+      avgs = self.get_acquire_average_count()
+      self.set_acquire_average_mode('OFF')
+      self.set_acquire_average_mode('ON')
+      self.set_acquire_average_count(avgs)
 
     def reset(self):
         '''
@@ -315,7 +422,7 @@ class Agilent_MSO9404A(Instrument):
         Output:
             None
         '''
-        logging.info(__name__ + ' : asking operation complete status.')
+        logging.debug(__name__ + ' : asking operation complete status.')
         return self._visainstrument.ask('*OPC?')
 
 
@@ -334,7 +441,7 @@ class Agilent_MSO9404A(Instrument):
         Output:
             None
         '''
-        logging.info(__name__ + ' : trigger event register query.')
+        logging.debug(__name__ + ' : trigger event register query.')
         return self._visainstrument.ask('TER?')
 
 
@@ -365,7 +472,7 @@ class Agilent_MSO9404A(Instrument):
         Output:
             None
         '''
-        logging.info(__name__ + ' : setting autoscale')
+        logging.debug(__name__ + ' : autoscalubg all axis')
         self._visainstrument.write(':AUTOSCALE')
 
 
@@ -379,7 +486,7 @@ class Agilent_MSO9404A(Instrument):
         Output:
             None
         '''
-        logging.info(__name__ + ' : setting autoscale for channel %s' % channel)
+        logging.info(__name__ + ' : autoscaling channel %s vertical axis' % channel)
         self._visainstrument.write(':AUTOSCALE:VERTICAL %s' % channel)
 
 
@@ -406,7 +513,7 @@ class Agilent_MSO9404A(Instrument):
         Initialize the selected channels or functions and acquire according to the current settings.
 
         Input:
-            a selected channel or function (string): CHAN1, CHAN2, CHAN3, CHAN4, DIG#, COMM1/2, DIFF1/2, leave blank '', or see p.683.  
+            selected channel (string): CHAN1, CHAN2, CHAN3, CHAN4, DIG#, COMM1/2, DIFF1/2, leave blank '', or see p.683.
 
         Output:
             None
@@ -517,7 +624,7 @@ class Agilent_MSO9404A(Instrument):
             completion % before measuring (float): see p. 147 of the programming manual.
         '''
         outp = self._visainstrument.ask(':WAVEFORM:COUNT?')
-        logging.debug(__name__ + ' : Getting waveform count (number of averages completed): %s' + outp)
+        logging.debug(__name__ + ' : Getting waveform count (number of averages completed): %s' % outp)
         return(int(outp))
 
 
@@ -551,53 +658,21 @@ class Agilent_MSO9404A(Instrument):
 
 
 
-    def get_waveform(self, channel=None, completion_criterion=None, turn_display_on=True):
+    def get_waveform(self):
         '''
-        Acquires the waveform on the screen.
-        
-        Input: channel: CHAN1, CHAN2, CHAN3, CHAN4, DIFF...
-        Output: data in WORD format        
-       
-        1 - system header off
-        2 - set the acquisition mode
-        3 - set the  completion criterion
-        4 - choose the waveform source (typically a channel)
-        5 - set the data output format
-        6 - set averaging and number of averages 
-        7 - set the number of points in the capture
-        8 - digitize
-        9 - get the waveform data.
+        Acquires the waveform (y points) on the screen. Use get_time_axis(preamble) to get the time points.
 
         Input:
             none
         Output:
-            status(string): ON or OFF.
+            preamble, waveform (1D vector)
         '''
-        #self.set_acquire_mode('HRES')
-        
-        #if completion_criterion != None:
-        #  self.set_completion_criterion(completion_criterion)
-
-        #if channel != None:
-        #  self.set_waveform_source(channel)
-        
-        # Digitize uses the ACQUIRE subsystem (p.74)
-        #self.digitize('CHAN%u' % channel)
-        #self.digitize()
         dat = self.get_waveform_as_words()
         pre = self.get_waveform_preamble()
 
         dat = self.__words_to_waveform(dat, pre)
-        time = self.get_time_axis()
 
-
-        #if turn_display_on:
-        #  # turn the display back on
-        #  self.set_display(1,channel)
-
-#        return pre, dat
         return pre, dat
-#       self.autoscale()
         
 
 
