@@ -1058,6 +1058,11 @@ class Instrument(SharedGObject):
             return None
 
         p['value'] = value
+        
+        if p['flags'] & self.FLAG_PERSIST:
+          config.set('persist_%s_%s' % (self._name, name), value)
+          config.save()
+
         self._queue_changed({name: value})
 
     def get_argspec_dict(self, a):
