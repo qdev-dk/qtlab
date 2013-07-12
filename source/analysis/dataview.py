@@ -282,6 +282,8 @@ class DataView():
           logging.info("Assuming '%s' stays constant within a sweep." % sweep_dimension)
 
         if use_sweep_direction:
+          for i in range(1,len(dx)):
+              if dx[i] == 0: dx[i]=dx[i-1] # this is necessary to detect changes in direction, when the end point is repeated
           change_in_sign = (1 + np.array(np.where(dx[1:] * dx[:-1] < 0),dtype=np.int).reshape((-1))).tolist()
 
           # the direction changing twice in a row means that sweeps are being done repeatedly
