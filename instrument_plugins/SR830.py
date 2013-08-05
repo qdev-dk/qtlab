@@ -19,6 +19,8 @@ from instrument import Instrument
 import visa
 import types
 import logging
+import numpy as np
+import qt
 import time
 
 class SR830(Instrument):
@@ -93,6 +95,8 @@ class SR830(Instrument):
                 18 : "10ks",
                 19 : "30ks"
             })
+        self.add_parameter('tau_in_seconds', flags=Instrument.FLAG_GETSET, units='s', type=types.FloatType) # for convenience
+
         self.add_parameter('out', type=types.FloatType, channels=(1,2,3,4),
             flags=Instrument.FLAG_GETSET,
             minval=-10.5, maxval=10.5, units='V', format='%.3f')
@@ -172,6 +176,7 @@ class SR830(Instrument):
 
         self.add_function('reset')
         self.add_function('get_all')
+        self.add_function('reset_averaging')
 
         if reset:
             self.reset()
@@ -207,6 +212,7 @@ class SR830(Instrument):
         logging.info(__name__ + ' : reading all settings from instrument')
         self.get_sensitivity()
         self.get_tau()
+        self.get_tau_in_seconds()
         self.get_frequency()
         self.get_amplitude()
         self.get_phase()
@@ -276,7 +282,7 @@ class SR830(Instrument):
         }
         self.direct_output()
         if parameters.__contains__(output):
-            logging.info(__name__ + ' : Reading parameter from instrument: %s ' %parameters.get(output))
+            logging.debug(__name__ + ' : Reading parameter from instrument: %s ' %parameters.get(output))
             if ovl:
                 self.get_input_overload()
                 self.get_time_constant_overload()
@@ -286,6 +292,110 @@ class SR830(Instrument):
             print 'Wrong output requested.'
         return readvalue
 
+    def reset_averaging(self, instruments=None):
+        '''
+        Resets the averaging by temporarily reducing the time constant.
+        
+        kwargs:
+          instruments -- reset the averaging on the specified list of instruments
+                         instead of 'self.'
+        '''
+    
+        insts = [self] if instruments == None else instruments
+
+        old_taus = [ i.get_tau() for i in insts ]
+        if np.array(old_taus).min() < 3: raise Exception('reset_averaging() not supported for tau < 3')
+
+        max_tau = np.array(old_taus).max()
+
+        # "erase" memory
+        #for i in insts: i.set_tau(0)
+        #qt.msleep(0.001)
+        
+        # set an intermediate tau
+        #for i,tau_old in zip(insts, old_taus): i.set_tau(tau_old - 3)
+        #qt.msleep(5*self.tau_index_to_seconds(max_tau - 3))
+        for i,tau_old in zip(insts, old_taus): i.set_tau(tau_old - 2)
+        qt.msleep(5*self.tau_index_to_seconds(max_tau - 2))
+        for i,tau_old in zip(insts, old_taus): i.set_tau(tau_old - 1)
+        qt.msleep(2*self.tau_index_to_seconds(max_tau - 1))
+        
+        # restore the old tau
+        for i,tau_old in zip(insts, old_taus): i.set_tau(tau_old)
+        
+    def wait_for_steady_value(self, derivative_sign_changes=2, soft_averages_when_sampling=.3, instruments=None):
+        '''
+        Block execution until the measured value settles.
+        
+        kwargs:
+          derivate_sign_changes --- wait for the sign of the time derivative of R to
+                                    change this many times
+          soft_averages_when_sampling  -- how long to average the samples (in units of tau)
+          instruments -- wait for the specified list of instruments
+                         instead of 'self.'
+        '''
+        insts = [self] if instruments == None else instruments
+        
+        r0 = (self.get_XY(soft_averages=soft_averages_when_sampling, instruments=insts)**2).sum(axis=1)
+        r1 = (self.get_XY(soft_averages=soft_averages_when_sampling, instruments=insts)**2).sum(axis=1)
+
+        sign_changed = np.array([ 0 for i in insts ], dtype=np.int)
+        while sign_changed.min() < derivative_sign_changes:
+          # get new samples
+          r2 = (self.get_XY(soft_averages=soft_averages_when_sampling, instruments=insts)**2).sum(axis=1)
+          #logging.debug('sampled r = %g' % r2)
+          
+          # check if the sign of the derivative changed
+          sign_changed += ((r2-r1) * (r1-r0) <= 0)
+          r0 = r1
+          r1 = r2
+          
+          logging.debug('sign_changed = %s' % str(sign_changed))
+          logging.debug('min(sign_changed) = %d < derivative_sign_changes = %d --> %s' % (sign_changed.min(), derivative_sign_changes, str(sign_changed.min() < derivative_sign_changes) ))
+        
+    def get_XY(self, ovl=False, soft_averages=None, instruments=None):
+        '''
+        Get the current (X,Y) tuple.
+        
+        kwargs:
+          soft_averages --- None or >= 0.1, which causes software averaging of the measured XY.
+                            Specified in units of the time constant tau.
+                            Note that soft_average=1 is different from None, since
+                            the former averages (a few samples) over one tau, while
+                            the latter returns a value immediately.
+          instruments   --- return a list of (X,Y) tuples from the specified
+                            list of instruments instead of 'self.' This way you
+                            can do soft_averages on multiple instruments in parallel.
+        '''
+        assert soft_averages == None or soft_averages > .1, 'soft_averages ~< 0 does not make sense.'
+        
+        insts = [self] if instruments == None else instruments
+        taus = [ i.get_tau_in_seconds() for i in insts ]
+        max_tau = np.array(taus).max()
+
+        assert soft_averages == None or max_tau > 0.200, 'soft_averages on ~< 100ms timescales is not a good idea.'
+        
+        xy = np.zeros((len(insts), 2), dtype=np.float)
+        
+        if soft_averages != None:
+          samples = np.max((2, int(np.round(3 * soft_averages))))
+          dt = soft_averages*max_tau / samples
+          for j in range(samples):
+            t0 = time.time()
+            xy[:,0] += np.array([ i.read_output(1, ovl) for i in insts ])
+            xy[:,1] += np.array([ i.read_output(2, ovl) for i in insts ])
+            qt.msleep(np.max((0., dt - (time.time() - t0))))
+          xy /= samples
+        else:
+          xy[:,0] += np.array([ i.read_output(1, ovl) for i in insts ])
+          xy[:,1] += np.array([ i.read_output(2, ovl) for i in insts ])
+
+        
+        if instruments == None:
+          return xy[0,:]
+        else:
+          return xy
+        
     def do_get_X(self, ovl=False):
         '''
         Read out X of the Lock In
@@ -377,7 +487,7 @@ class SR830(Instrument):
 
     def do_set_tau(self,timeconstant):
         '''
-        Set the time constant of the LockIn
+        Set the index of time constant of the LockIn
 
         Input:
             time constant (integer) : integer from 0 to 19
@@ -389,10 +499,11 @@ class SR830(Instrument):
         self.direct_output()
         logging.debug(__name__ + ' : setting time constant on instrument to %s'%(timeconstant))
         self._visainstrument.write('OFLT %s' % timeconstant)
+        self.update_value('tau_in_seconds', self.tau_index_to_seconds(timeconstant))
 
     def do_get_tau(self):
         '''
-        Get the time constant of the LockIn
+        Get the index of time constant of the LockIn
 
         Input:
             None
@@ -401,8 +512,53 @@ class SR830(Instrument):
         '''
 
         self.direct_output()
-        logging.debug(__name__ + ' : getting time constant on instrument')
-        return float(self._visainstrument.ask('OFLT?'))
+        r = self._visainstrument.ask('OFLT?')
+        ind = int(r)
+        secs = self.tau_index_to_seconds(ind)
+        logging.debug(__name__ + ' : getting time constant on instrument: %s == %.1e s' % (r, secs))
+        self.update_value('tau_in_seconds', secs)
+        return ind
+
+    def do_get_tau_in_seconds(self):
+        '''
+        Get the time constant of the LockIn in seconds
+
+        Input:
+            None
+        Output:
+            time constant (float) : time constant in seconds
+        '''
+        return self.tau_index_to_seconds(self.get_tau())
+
+    def do_set_tau_in_seconds(self, val):
+        '''
+        Set the time constant of the LockIn in seconds
+
+        Input:
+            (float) : time constant in seconds. Allowed values are given in the doc for get_tau().
+        Output:
+            None
+        '''
+
+        ind = self.seconds_to_tau_index(val)
+        logging.debug('setting tau to %s --> %.1e' % (ind, val))
+        self.set_tau(ind)
+    
+    def tau_index_to_seconds(self, ind):
+        return 10**(-5 + int(ind)/2) * (1.+2*(int(ind)%2))
+    
+    def seconds_to_tau_index(self, val):
+        # check that a valid value was provided
+        if ( val < 10e-6-1e-9 or val > 30e3 + 1):
+          raise Exception('Invalid time constant %.3e. Out of range.' % val)
+
+        power = int(np.round(np.log10(val)))
+        prefactor = 10 ** (np.log10(val) % 1)
+        
+        if not ( np.abs(prefactor - 1.) < 1e-3 or np.abs(prefactor - 3.) < 1e-3 ):
+          raise Exception('Invalid time constant %.3e. The prefactor must be 1 or 3.' % val)
+
+        return (0 if np.abs(prefactor-1) < 0.1 else 1) + 2*(power+5)
 
     def do_set_sensitivity(self, sens):
         '''
