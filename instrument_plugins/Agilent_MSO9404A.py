@@ -301,88 +301,103 @@ class Agilent_MSO9404A(Instrument):
         Output:
             None
         '''
-        if self.get_acquire_average_mode() == 'ON':
-          self.reset_averaging()
-          target_avg_count = self.get_acquire_average_count()
-        else:
-          target_avg_count = 1
+        for attempt in range(3):
         
-        total_duration = self.get_timebase_range()
-        
-        self.run()
-        start_time = time.time()
-
-        qt.msleep(1.)
-        avg_count = 0
-        
-        for wait_attempt in range(10):
-          # get the data from the scope
-          try:
-            # make sure scope digitize has actually completed
-            if wait_attempt == 0:
-              extra_sleep_factor = 1.
-            else:
-              extra_sleep_factor = 2 if avg_count == 0 else (1.1 * target_avg_count / float(avg_count))
-            
-            sleeping = .5 + 1.15*total_duration*(target_avg_count - avg_count) * extra_sleep_factor
-            logging.debug('Expecting measurement to be done in %g seconds. Sleeping until then.' % sleeping)
-            qt.msleep( sleeping )
-
-            avg_count = self.get_waveform_count()
-            complete = (avg_count >= target_avg_count)
-            if not complete: raise Exception( 'Acquisition taking longer (already %g s) than expected (%g s).' % (time.time() - start_time, total_duration*target_avg_count) )
-            self.stop()
-            break
-
-          except Exception as e:
-            if str(e) == 'Human abort': raise e
-            if wait_attempt > 0:
-              logging.warn('Sleeping more... Exception was: %s' % str(e)) 
-            else:
-              logging.debug('Sleeping more... Exception was: %s' % str(e)) 
-            
-        logging.debug('Data digitized. Now fetching it from the scope.')
-        pres = []
-        wavs = []
-        for ch in channels:
-          self.set_waveform_source('CHAN%u' % ch)
-          pre, wav = self.get_waveform()
-          pres.append(pre)
-          wavs.append(wav)
-      
-          logging.debug('Got %d pts for channel %s' % (len(wavs[-1]), ch))
-
-        if not complete:
-          raise Exception('Failed to reach %d averages as requested. (Got up to %d.)' % (target_avg_count, avg_count))
-
-        if not resample:
-          return [ {'pre': p, "wav": w } for p,w in zip(pres, wavs) ]
-
-        # often the scope returns a longer time segment than you ask for...
-        # resample the returned data to match the specified timebase and number of points
-        target_no_of_pts = self.get_acquire_points()
-        new_time_axis = np.linspace(0, total_duration, target_no_of_pts)
-        epsilon_t = total_duration / float(target_no_of_pts) / 10. # negligible amount of time (for == comparisons)
-
-        assert (np.abs(self.get_timebase_position()) < epsilon_t
-                and self.get_timebase_reference().lower() == 'left'), 'resample only implemented for timebase ref = LEFT and position = 0.'
-        
-        for i in range(len(wavs)):
-          scope_time_axis = self.get_time_axis(pres[i])
-          returned_no_of_pts = len(wavs[i])
+          if self.get_acquire_average_mode() == 'ON':
+            self.reset_averaging()
+            target_avg_count = self.get_acquire_average_count()
+          else:
+            target_avg_count = 1
           
-          if (returned_no_of_pts != target_no_of_pts
-              or np.abs(scope_time_axis[0]) > epsilon_t
-              or np.abs(scope_time_axis[-1] - total_pattern_duration) > epsilon_t):
-            first_pt = np.argmin(np.abs(scope_time_axis))
-            last_pt = np.argmin(np.abs(scope_time_axis - total_duration))
-            
-            # resample
-            wavs[i] = interpolate.interp1d(scope_time_axis, wavs[i], kind='linear')(new_time_axis)
-            
-            logging.debug("Resamples channel %s waveform from %d to %d pts." % (channels[i], returned_no_of_pts, len(wavs[i])))
+          total_duration = self.get_timebase_range()
+          
+          self.run()
+          start_time = time.time()
 
-        return [ {'pre': p, "wav": w, 'time_axis': new_time_axis } for p,w in zip(pres, wavs) ]
+          avg_count = 0
+          
+          for wait_attempt in range(5):
+            # get the data from the scope
+            try:
+              # make sure scope digitize has actually completed
+              if wait_attempt == 0:
+                extra_sleep_factor = 1.
+              else:
+                extra_sleep_factor = 2 if avg_count == 0 else (1.1 * target_avg_count / float(avg_count))
+              
+              sleeping = .5 + 1.15*total_duration*(target_avg_count - avg_count) * extra_sleep_factor
+              logging.debug('Expecting measurement to be done in %g seconds. Sleeping until then.' % sleeping)
+              qt.msleep( sleeping )
+
+              avg_count = self.get_waveform_count()
+              complete = (avg_count >= target_avg_count)
+              if not complete: raise Exception( 'Acquisition taking longer (already %g s) than expected (%g s).' % (time.time() - start_time, total_duration*target_avg_count) )
+              self.stop()
+              break
+
+            except Exception as e:
+              if str(e) == 'Human abort': raise e
+              if wait_attempt > 0:
+                logging.warn('Sleeping more... Exception was: %s' % str(e)) 
+              else:
+                logging.debug('Sleeping more... Exception was: %s' % str(e)) 
+              
+          logging.debug('Data digitized. Now fetching it from the scope.')
+          pres = []
+          wavs = []
+          try:
+            for ch in channels:
+              self.set_waveform_source('CHAN%u' % ch)
+              pre, wav = self.get_waveform()
+              pres.append(pre)
+              wavs.append(wav)
+              logging.debug('Got %d pts for channel %s' % (len(wavs[-1]), ch))
+          except:
+            logging.exception('Failed to get waveform from scope. Trying again...')
+            continue
+
+          if not complete:
+            raise Exception('Failed to reach %d averages as requested. (Got up to %d.)' % (target_avg_count, avg_count))
+
+          if not resample:
+            return [ {'pre': p, "wav": w } for p,w in zip(pres, wavs) ]
+
+          # often the scope returns a longer time segment than you ask for...
+          # resample the returned data to match the specified timebase and number of points
+          target_no_of_pts = self.get_acquire_points()
+          new_time_axis = np.linspace(0, total_duration, target_no_of_pts)
+          epsilon_t = total_duration / float(target_no_of_pts) / 10. # negligible amount of time (for == comparisons)
+
+          assert (np.abs(self.get_timebase_position()) < epsilon_t
+                  and self.get_timebase_reference().lower() == 'left'), 'resample only implemented for timebase ref = LEFT and position = 0.'
+          
+          for i in range(len(wavs)):
+            scope_time_axis = self.get_time_axis(pres[i])
+            returned_no_of_pts = len(wavs[i])
+            
+            if (returned_no_of_pts != target_no_of_pts
+                or np.abs(scope_time_axis[0]) > epsilon_t
+                or np.abs(scope_time_axis[-1] - total_pattern_duration) > epsilon_t):
+              first_pt = np.argmin(np.abs(scope_time_axis))
+              last_pt = np.argmin(np.abs(scope_time_axis - total_duration))
+              
+              # smooth before resampling (if down sampling)
+              scope_dt = np.median(np.abs(scope_time_axis[1:] - scope_time_axis[:-1]))
+              requested_dt = np.median(np.abs(new_time_axis[1:] - new_time_axis[:-1]))
+              smooth_window = int(np.floor(requested_dt/scope_dt))
+              if smooth_window > 2:
+                smooth_wav = np.convolve(wavs[i], np.ones(smooth_window,dtype=np.float)/smooth_window, mode='same')
+              else:
+                smooth_wav = wavs[i]
+              
+              # resample
+              wavs[i] = interpolate.interp1d(scope_time_axis, smooth_wav, kind='linear')(new_time_axis)
+              
+              logging.debug("Resamples channel %s waveform from %d to %d pts." % (channels[i], returned_no_of_pts, len(wavs[i])))
+
+          return [ {'pre': p, "wav": w, 'time_axis': new_time_axis } for p,w in zip(pres, wavs) ]
+          
+        raise Exception('Giving up...')
 
     def reset_averaging(self):
       '''
