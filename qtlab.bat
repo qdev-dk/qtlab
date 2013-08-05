@@ -11,6 +11,7 @@
 
 :: Add gnuplot to PATH ("binary" folder for >= 4.4.0, "bin" folder for 4.3)
 SET PATH=%CD%\3rd_party\gnuplot\binary;%PATH%
+SET PATH=%CD%\3rd_party\gnuplot\bin;%PATH%
 
 :: Add Console2 to PATH
 SET PATH=%CD%\3rd_party\Console2\;%PATH%
@@ -21,6 +22,10 @@ SET PATH=%CD%\3rd_party\Console2\;%PATH%
 ::SET PATH=%CD%\3rd_party\gtk\bin;%CD%\3rd_party\gtk\lib;%PATH%
 
 :: Check for version of python
+IF EXIST c:\epd27\python.exe (
+    SET PYTHON_PATH=c:\epd27
+    GOTO mark1
+)
 IF EXIST c:\python27\python.exe (
     SET PYTHON_PATH=c:\python27
     GOTO mark1
@@ -40,6 +45,11 @@ IF EXIST "%PYTHON_PATH%\scripts\ipython.py" (
 :: check if version >= 0.11
 IF EXIST "%PYTHON_PATH%\scripts\ipython-script.py" (
     start Console -w "QTLab" -r "/k %PYTHON_PATH%\python.exe %PYTHON_PATH%\scripts\ipython-script.py --gui=gtk -i source/qtlab_shell.py -- %*"
+    GOTO EOF
+)
+:: check if EPD
+IF EXIST "%PYTHON_PATH%\scripts\ipython.bat" (
+    start Console -w "QTLab" -r "/k %PYTHON_PATH%\scripts\ipython.bat -i source/qtlab_shell.py"
     GOTO EOF
 )
 
