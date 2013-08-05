@@ -112,12 +112,11 @@ class _QTGnuPlot():
         'zrange': 'set zrange [%s:%s]\n',
         'cbrange': 'set cbrange [%s:%s]\n',
 
-        'xtics': 'set xtics\n',
-        'x2tics': 'set x2tics\n',
-        'ytics': 'set ytics\n',
-        'ytics_with_options': 'set ytics %s\n',
-        'y2tics': 'set y2tics\n',
-        'ztics': 'set ztics\n',
+        'xtics': 'set xtics %s\n',
+        'x2tics': 'set x2tics %s\n',
+        'ytics': 'set ytics %s\n',
+        'y2tics': 'set y2tics %s\n',
+        'ztics': 'set ztics %s\n',
 
         'formatx': 'set format x "%s"\n',
         'formaty': 'set format y "%s"\n',
@@ -196,7 +195,6 @@ class _QTGnuPlot():
 
     def quit(self):
         self.cmd('quit')
-        self._gnuplot.close_gnuplot()
 
     def get_first_filepath(self):
         '''Return filepath of first data item.'''

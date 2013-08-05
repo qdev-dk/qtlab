@@ -239,28 +239,30 @@ class Plot(SharedGObject):
         '''Set log scale on top y axis.'''
         self.set_property('y2log', val, update=update)
 
-    def set_xtics(self, val, update=True):
+    def set_xtics(self, val, update=True, options=None):
         '''Enable/disable tics on left x axis.'''
-        self.set_property('xtics', val, update=update)
+        if (not val) or options==None: self.set_property('xtics', val, update=update)
+        else:                          self.set_property('xtics', str(options), update=update)
 
-    def set_x2tics(self, val, update=True):
+    def set_x2tics(self, val, update=True, options=None):
         '''Enable/disable tics on right x axis.'''
-        self.set_property('x2tics', val, update=update)
+        if (not val) or options==None: self.set_property('x2tics', val, update=update)
+        else:                          self.set_property('x2tics', str(options), update=update)
 
     def set_ytics(self, val, update=True, options=None):
         '''Enable/disable tics on bottom y axis.'''
-        if options == None or not val:
-            self.set_property('ytics', val, update=update)
-        else:
-            self.set_property('ytics_with_options', str(options), update=update)
+        if (not val) or options==None: self.set_property('ytics', val, update=update)
+        else:                          self.set_property('ytics', str(options), update=update)
 
-    def set_y2tics(self, val, update=True):
+    def set_y2tics(self, val, update=True, options=None):
         '''Enable/disable tics on top y axis.'''
-        self.set_property('y2tics', val, update=update)
+        if (not val) or options==None: self.set_property('y2tics', val, update=update)
+        else:                          self.set_property('y2tics', str(options), update=update)
 
-    def set_ztics(self, val, update=True):
+    def set_ztics(self, val, update=True, options=None):
         '''Enable/disable tics on z axis.'''
-        self.set_property('ztics', val, update=update)
+        if (not val) or options==None: self.set_property('ztics', val, update=update)
+        else:                          self.set_property('ztics', str(options), update=update)
 
     # Implementation classes need to implement set_range()
 
