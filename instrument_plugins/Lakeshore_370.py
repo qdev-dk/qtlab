@@ -469,7 +469,7 @@ class Lakeshore_370(Instrument):
         return float(ans)
         
     def do_set_temperature_control_setpoint(self, val):
-        self.__write('SETP %f' % (val))
+        self.__write('SETP %.3E' % (val))
         time.sleep(.1)
         self.get_temperature_control_setpoint()
         
