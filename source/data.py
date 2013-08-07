@@ -958,7 +958,13 @@ class Data(SharedGObject):
             if len(self._data) == 0:
                 self._data = numpy.atleast_2d(args)
             else:
-                self._data = numpy.append(self._data, [args], axis=0)
+                args_n_dims = len(numpy.array(args).shape)
+                if args_n_dims == 1:
+                  self._data = numpy.append(self._data, [args], axis=0)
+                elif args_n_dims == 2:
+                  self._data = numpy.append(self._data, args, axis=0)
+                else:
+                  assert False, 'args should not have more than 2 dimensions here...'
 
         if self._infile:
             if npoints == 1:
