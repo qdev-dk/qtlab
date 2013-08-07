@@ -20,7 +20,6 @@ import os
 import os.path
 import time
 import numpy as np
-from numpy import ma
 import types
 import re
 import logging
@@ -71,11 +70,10 @@ class DataView():
           self._comments = data._comments
           
           if deep_copy:
-            self._masked_data = ma.masked_array(data._masked_data.data, fill_value=data._masked_data.fill_value)
-            self._masked_data.mask = data._masked_data.mask.copy()
+            self._data = self._data.copy()
+            self._mask = self._mask.copy()
           else:
-            self._masked_data = ma.masked_array(data._masked_data.data, fill_value=data._masked_data.fill_value)
-            self._masked_data.mask = data._masked_data.mask.copy()
+            self._mask = self._mask.copy()
 
           for name, fn in data._virtual_dims.items():
               self._virtual_dims[name] = fn
@@ -134,11 +132,8 @@ class DataView():
               all_comments.append([ (rowno + lens[:jj].sum(), commentstr) for rowno,commentstr in comments ])
           self._comments = list(itertools.chain.from_iterable(all_comments)) # flatten by one level
 
-        try:
-          self._masked_data = ma.masked_array(unmasked, fill_value=np.NaN)
-        except ValueError:
-          # fill_value=np.NaN does not work for non-float data
-          self._masked_data = ma.masked_array(unmasked)
+        self._data = unmasked
+        self._mask = np.zeros(len(unmasked), dtype=np.bool)
 
         self._dimension_indices = dict([(n,i) for i,n in enumerate(self._dimensions)])
         self.set_mask(False)
@@ -170,20 +165,26 @@ class DataView():
         '''
         Returns a list of strings that tell which Data object each of the unmasked rows originated from.
         '''
-        return [ i for i in itertools.compress(self._source_col, ~(self._masked_data.mask[:,0])) ]
+        return [ i for i in itertools.compress(self._source_col, ~(self._mask)) ]
 
     def clear_mask(self):
         '''
         Unmask all data (i.e. make all data in the initially
         provided Data object visible again).
         '''
-        self._masked_data.mask = False
+        self._mask[:] = False
 
     def get_mask(self):
         '''
         Get a vector of booleans indicating which rows are masked.
         '''
-        return self._masked_data.mask[:,0]
+        return self._mask.copy()
+
+    def get_dimensions(self):
+        '''
+        Returns a list of all dimensions, both real and virtual.
+        '''
+        return list(itertools.chain(self._dimension_indices.keys(), self._virtual_dims.keys()))
 
     def get_comments(self, include_row_numbers=True):
         '''
@@ -216,19 +217,15 @@ class DataView():
 
         See also mask_rows().
         '''
-        # although np.ma.mask can be just False, it's a PITA to
-        # handle the case separately later so convert it
-        # to [False, False,...] here.
         try:
           if mask:
-            m = np.ones( self._masked_data.shape, dtype=np.bool)
+            self._mask[:] = True
           else:
-            m = np.zeros(self._masked_data.shape, dtype=np.bool)
+            self._mask[:] = False
         except:
-            m = np.zeros(self._masked_data.shape, dtype=np.bool)
-            m[mask,:] = True
-        self._masked_data.mask = m
-
+          m = np.zeros(len(self._mask), dtype=np.bool)
+          m[mask] = True
+          self._mask = m
 
     def mask_rows(self, row_mask, unmask_instead=False):
         '''
@@ -242,8 +239,8 @@ class DataView():
           # ignore points where source current exceeds 1 uA.
           d.mask_rows(np.abs(d['I_source']) > 1e-6)
         '''
-        old_mask = self._masked_data.mask[:,0]
-        n = (~old_mask).astype(np.int).sum() # no. of previously unmasked entrie
+        old_mask = self._mask
+        n = (~old_mask).astype(np.int).sum() # no. of previously unmasked entries
         #logging.debug("previously unmasked rows = %d" % n)
 
         # new mask for the previously unmasked rows
@@ -333,62 +330,36 @@ class DataView():
         self.mask_sweeps(sweep_dimension, sl, unmask_instead=True)
 
 
-    def get_data(self, masked=False, fill=False, deep_copy=False):
+    def get_data(self, deep_copy=False):
         '''
         Get the non-masked data as a 2D ndarray.
 
         kwargs:
-          masked    -- return the data as a masked array instead of ndarray
-          fill      -- fill the masked entries with a fill_value (type dependent,
-                       np.NaN for floats) instead of skipping them.
           deep_copy -- copy the returned data so that it is safe to modify it.
         '''
-        if masked and fill:
-            logging.warn('Specifying both "masked" and "fill" does not make sense.')
-        
-        if masked: d = self._masked_data
-        elif fill: d = self._masked_data.filled()
-        else:
-            d = self._masked_data[~self._masked_data.mask]
-            try:
-                d = d.reshape((-1,self._masked_data.shape[1]))
-            except:
-                logging.warn('Could not reshape the masked data into the original columns.')
-                pass # the reshaping fails if the mask is not a simple row mask
-
+        d = self._data[~(self._mask)]
         if deep_copy: d = d.copy()
-
         return d
 
-    def get_column(self, name, masked=False, fill=False, deep_copy=False):
+    def get_column(self, name, deep_copy=False):
         '''
         Get the non-masked entries of dimension 'name' as a 1D ndarray.
         name is the dimension name.
 
         kwargs:
-          masked    -- return the data as a masked array instead of ndarray
-          fill      -- fill the masked entries with a fill_value (type dependent,
-                       np.NaN for floats) instead of skipping them.
           deep_copy -- copy the returned data so that it is safe to modify it.
         '''
-        if masked and fill:
-            logging.warn('Specifying both "masked" and "fill" does not make sense.')
-
         if name in self._virtual_dims.keys():
             d = self._virtual_dims[name]['fn'](self)
-            if not self._virtual_dims[name]['returns_ma']: return d
+            if len(d) == len(self._mask): d = d[~(self._mask)] # The function may return masked or unmasked data...
+            return d
         else:
-            d = self._masked_data[:,self._dimension_indices[name]]
+            d = self._data[~(self._mask),self._dimension_indices[name]]
         
-        if masked: pass
-        elif fill: d = d.filled()
-        else:      d = d[~d.mask]
-
         if deep_copy: d = d.copy()
-
         return d
 
-    def add_virtual_dimension(self, name, fn=None, arr=None, comment_regex=None, returns_masked_array=True, cache_fn_values=True):
+    def add_virtual_dimension(self, name, fn=None, arr=None, comment_regex=None, cache_fn_values=True):
         '''
         Makes a computed vector accessible as self[name].
         The computed vector depends on whether fn, arr or comment_regex is specified.
@@ -401,10 +372,6 @@ class DataView():
           arr           -- specify the column directly as an array, i.e. self[name] returns arr
           comment_regex -- for each row, take the value from the last match in a comment, otherwise np.NaN
 
-          returns_masked_array -- fn returns a masked array, so that the
-                                  usual arguments regarding masking passed to get_column
-                                  are automatically handled. Otherwise, no
-                                  masking is done to fn(data).
           cache_fn_values -- evaluate fn(self) immediately for the entire (unmasked) array and cache the result
         '''
         logging.debug('adding virtual dimension "%s"' % name)
@@ -412,16 +379,16 @@ class DataView():
         assert (fn != None) + (arr != None) + (comment_regex != None) == 1, 'You must specify exactly one of "fn", "arr", or "comment_regex".'
 
         if arr != None:
-            assert arr.shape == tuple([len(self._masked_data[:,0])]), '"arr" must be a 1D vector of the same length as the real data columns. If you want to do something fancier, specify your own fn.'
+            assert arr.shape == tuple([len(self._mask)]), '"arr" must be a 1D vector of the same length as the real data columns. If you want to do something fancier, specify your own fn.'
 
             self.add_virtual_dimension(name,
-                                       (lambda dd,arr=arr: ma.masked_array(arr,mask=dd._masked_data.mask[:,0])),
+                                       (lambda dd,arr=arr: arr),
                                        cache_fn_values=False)
             return
 
         if comment_regex != None:
             # construct the column by parsing the comments
-            vals = np.empty(len(self._masked_data.mask)) + np.nan
+            vals = np.empty(len(self._mask)) + np.nan
 
             prev_match_on_row = 0
             prev_val = np.nan
@@ -458,7 +425,7 @@ class DataView():
             self.add_virtual_dimension(name, arr=vals, cache_fn_values=False)
             return
 
-        self._virtual_dims[name] = {'fn': fn, 'returns_ma': returns_masked_array}
+        self._virtual_dims[name] = {'fn': fn}
 
     def remove_virtual_dimension(self, name):
         if name in self._virtual_dims.keys():
