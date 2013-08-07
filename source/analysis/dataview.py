@@ -144,7 +144,7 @@ class DataView():
         self.set_mask(False)
 
         if source_column_name != None:
-          self.add_virtual_dimension(source_column_name, lambda d: d.get_data_source(), returns_masked_array=False)
+          self.add_virtual_dimension(source_column_name, arr=np.array(self._source_col))
 
     def __getitem__(self, index):
         '''
@@ -298,7 +298,7 @@ class DataView():
 
           sweeps = np.concatenate((start_indices, stop_indices)).reshape((2,-1)).T
         else:
-          change_in_sdim = np.array(np.where(dx != 0)).reshape((-1))
+          change_in_sdim = 1 + np.array(np.where(dx != 0)).reshape((-1))
           if len(change_in_sdim) == 0: return np.array([[0, len(sdim)]])
 
           start_indices = np.concatenate(([0], change_in_sdim))
@@ -388,7 +388,7 @@ class DataView():
 
         return d
 
-    def add_virtual_dimension(self, name, fn=None, arr=None, comment_regex=None, returns_masked_array=True, cache_fn_values=False):
+    def add_virtual_dimension(self, name, fn=None, arr=None, comment_regex=None, returns_masked_array=True, cache_fn_values=True):
         '''
         Makes a computed vector accessible as self[name].
         The computed vector depends on whether fn, arr or comment_regex is specified.
@@ -414,7 +414,9 @@ class DataView():
         if arr != None:
             assert arr.shape == tuple([len(self._masked_data[:,0])]), '"arr" must be a 1D vector of the same length as the real data columns. If you want to do something fancier, specify your own fn.'
 
-            self.add_virtual_dimension(name, lambda dd,arr=arr: ma.masked_array(arr,mask=dd._masked_data.mask[:,0]))
+            self.add_virtual_dimension(name,
+                                       (lambda dd,arr=arr: ma.masked_array(arr,mask=dd._masked_data.mask[:,0])),
+                                       cache_fn_values=False)
             return
 
         if comment_regex != None:
