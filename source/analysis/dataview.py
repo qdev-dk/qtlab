@@ -41,7 +41,15 @@ if in_qtlab:
 
 class DataView():
     '''
-    class for post-processing measurement data
+    Class for post-processing measurement data. Main features are:
+      * Concatenating multiple qt.Data objects
+      * Creating "virtual" columns by parsing comments or applying arbitrary functions to the data
+      * Dividing the rows into sweeps.
+
+    Features not yet implemented but that might be useful:
+      * Parsing virtual columns from the measurement .cfg files.
+
+    See qtlab/examples/analysis_with_dataview.py for example use.
     '''
 
     def __init__(self, data, deep_copy=False, source_column_name='data_source', **kwargs):
@@ -70,10 +78,12 @@ class DataView():
           self._comments = data._comments
           
           if deep_copy:
-            self._data = self._data.copy()
-            self._mask = self._mask.copy()
+            self._data = data._data.copy()
           else:
-            self._mask = self._mask.copy()
+            self._data = data._data
+
+          # Always deep copy the mask
+          self._mask = data._mask.copy()
 
           for name, fn in data._virtual_dims.items():
               self._virtual_dims[name] = fn
@@ -266,6 +276,8 @@ class DataView():
         considered a sweep.
         
         Returns a sequence of tuples indicating the start and end of each sweep.
+
+        Note that the indices are relative to the currently _unmasked_ rows only.
         '''
         sdim = self[sweep_dimension]
         dx = np.sign(sdim[1:] - sdim[:-1])
