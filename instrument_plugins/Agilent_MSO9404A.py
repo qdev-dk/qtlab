@@ -33,6 +33,44 @@ class Agilent_MSO9404A(Instrument):
     Usage:
     Initialize with
     <name> = instruments.create('<name>', 'Agilent_MSO9404A', address='<GBIP address>, reset=<bool>')
+
+    Typical use (assuming <name> == scope):
+
+    # Configure:
+    scope.reset()
+    scope.set_timebase_ref_clock_mode('EXT')
+    scope.set_ch1_input_coupling('DC')
+    scope.set_ch2_input_coupling('DC')
+    scope.set_display(1,1)
+    scope.set_display(1,2)
+    scope.set_ch1_vertical_range(8.)
+    scope.set_ch1_vertical_offset(.5)
+    scope.set_ch2_vertical_range(8.)
+    scope.set_ch2_vertical_offset(0.)
+    scope.set_acquire_mode('HRES')
+    scope.set_acquire_average_mode('ON')
+    scope.set_acquire_average_count(4)
+    scope.stop()
+
+    scope.set_timebase_range(.5) # Total duration to capture
+    scope.set_timebase_reference('LEFT')
+    scope.set_timebase_position(0.)
+
+    scope.set_acquire_points(acquire_pts)
+    qt.msleep(1.) # should not be necessary
+
+    # Assuming you wish to trigger from channel 2:
+    scope.setup_edge_trigger(trigger_source_channel=2, trigger_level=.6)
+    qt.msleep(5.) # probably not necessary
+
+
+    ## Acquire the data
+    scope_data = scope.acquire_and_return_data(channels=[1,2], resample=True)
+    time_axis = scope_data[0]['time_axis']
+    ch1 = scope_data[0]['wav']
+    ch2 = scope_data[1]['wav']
+
+    # Now you can e.g. plot ch1 vs time_axis.
     '''
 
     def __init__(self, name, address, reset=False):
