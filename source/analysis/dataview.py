@@ -43,11 +43,9 @@ class DataView():
     '''
     Class for post-processing measurement data. Main features are:
       * Concatenating multiple qt.Data objects
-      * Creating "virtual" columns by parsing comments or applying arbitrary functions to the data
+      * Creating "virtual" columns by parsing comments or .set files
+        or by applying arbitrary functions to the data
       * Dividing the rows into sweeps.
-
-    Features not yet implemented but that might be useful:
-      * Parsing virtual columns from the measurement .cfg files.
 
     See qtlab/examples/analysis_with_dataview.py for example use.
     '''
@@ -76,6 +74,7 @@ class DataView():
           self._dimension_indices = data._dimension_indices
           self._source_col = data._source_col
           self._comments = data._comments
+          self._settings = data._settings
           
           if deep_copy:
             self._data = data._data.copy()
@@ -100,8 +99,14 @@ class DataView():
 
           self._comments = data.get_comment(include_row_numbers=True)
 
+          try:
+            self._settings = [ (0, self._parse_settings(data)) ]
+          except:
+            logging.exception("Could not parse the instrument settings file. Doesn't matter if you were not planning to add virtual columns based on values in the .set files.")
+            self._settings = None
+
         except MemoryError as e:
-          raise e
+          raise
 
         except Exception as e: # probably a sequence of Data objects then
           self._dimensions = data[0].get_dimension_names()
@@ -141,6 +146,17 @@ class DataView():
           for jj,comments in enumerate(self._comments):
               all_comments.append([ (rowno + lens[:jj].sum(), commentstr) for rowno,commentstr in comments ])
           self._comments = list(itertools.chain.from_iterable(all_comments)) # flatten by one level
+
+          # Parse all settings (.set) files and store them in a dict where the key indicates
+          # the starting row of the .set
+          try:
+            self._settings = []
+            all_settings = [ self._parse_settings(dat) for dat in data ]
+            for jj,settings in enumerate(all_settings):
+              self._settings.append( (lens[:jj].sum(), settings) )
+          except:
+            logging.exception("Could not parse the instrument settings file for one or more qt.Data objects. Doesn't matter if you were not planning to add virtual columns based on values in the .set files.")
+            self._settings = None
 
         self._data = unmasked
         self._mask = np.zeros(len(unmasked), dtype=np.bool)
@@ -371,7 +387,7 @@ class DataView():
         if deep_copy: d = d.copy()
         return d
 
-    def add_virtual_dimension(self, name, fn=None, arr=None, comment_regex=None, cache_fn_values=True):
+    def add_virtual_dimension(self, name, fn=None, arr=None, comment_regex=None, from_set=None, cache_fn_values=True):
         '''
         Makes a computed vector accessible as self[name].
         The computed vector depends on whether fn, arr or comment_regex is specified.
@@ -382,13 +398,20 @@ class DataView():
         kwargs:
           fn            -- the function applied to the DataView object, i.e self[name] returns fn(self)
           arr           -- specify the column directly as an array, i.e. self[name] returns arr
-          comment_regex -- for each row, take the value from the last match in a comment, otherwise np.NaN
+          comment_regex -- for each row, take the value from the last match in a comment, otherwise np.NaN.
+                           Can be just a regex or a (regex, dtype) tuple.
+          from_set      -- for each row, take the value from the corresponding .set file. Specify as
+                           a tuple ("instrument_name", "parameter_name", dtype=np.float).
 
           cache_fn_values -- evaluate fn(self) immediately for the entire (unmasked) array and cache the result
         '''
         logging.debug('adding virtual dimension "%s"' % name)
 
-        assert (fn != None) + (arr != None) + (comment_regex != None) == 1, 'You must specify exactly one of "fn", "arr", or "comment_regex".'
+        assert (fn != None) + (arr != None) + (comment_regex != None) + (from_set != None) == 1, 'You must specify exactly one of "fn", "arr", or "comment_regex".'
+
+        if from_set != None:
+            assert len(from_set) in [2, 3], 'from_set must be a tuple or triple.'
+            assert self._settings != None, '.set files were not successfully parsed during dataview initialization.'
 
         if arr != None:
             assert arr.shape == tuple([len(self._mask)]), '"arr" must be a 1D vector of the same length as the real data columns. If you want to do something fancier, specify your own fn.'
@@ -398,24 +421,52 @@ class DataView():
                                        cache_fn_values=False)
             return
 
-        if comment_regex != None:
-            # construct the column by parsing the comments
-            vals = np.empty(len(self._mask)) + np.nan
+        if comment_regex != None or from_set != None:
+            # construct the column by parsing the comments or .sets
+            use_set = (from_set != None) # shorthand for convenience
+
+            # pre-allocate an array
+            if use_set:
+              dtype = np.float if len(from_set)<3 else from_set[2]
+            else:
+              if isinstance(comment_regex, basestring):
+                regex = comment_regex
+                dtype = np.float
+              else:
+                regex = comment_regex[0]
+                dtype = comment_regex[1]
+            vals = np.zeros(len(self._mask), dtype=dtype)
+            if dtype == np.float: vals += np.nan # initialize to NaN instead of zeros
 
             prev_match_on_row = 0
             prev_val = np.nan
 
             #logging.debug(self._comments)
 
-            for rowno,commentstr in self._comments:
-                m = re.search(comment_regex, commentstr)
-                if m == None: continue
-                #logging.debug('Match on row %d: "%s"' % (rowno, commentstr))
+            for rowno,commentstr in (self._settings if use_set else self._comments):
+                if use_set:
+                  # simply use the value from the .set file
+                  assert from_set[0] in commentstr.keys(), 'Instrument "%s" not found in all .set files.' % from_set[0]
+                  assert from_set[1] in commentstr[from_set[0]].keys(), 'Attribute "%s:%s" not found in all .set files.' % (from_set[0], from_set[1])
+                  new_val = commentstr[from_set[0]][from_set[1]]
+                else:
+                  # see if the comment matches the specified regex
+                  m = re.search(regex, commentstr)
+                  if m == None: continue
+                  #logging.debug('Match on row %d: "%s"' % (rowno, commentstr))
 
-                if len(m.groups()) != 1:
-                  logging.warn('Did not get a unique match (%s) in comment (%d): %s' % (str(groups), rowno, commentstr))
+                  if len(m.groups()) != 1:
+                    logging.warn('Did not get a unique match (%s) in comment (%d): %s'
+                                 % (str(groups), rowno, commentstr))
+                  new_val = m.group(1)
 
-                new_val = float(m.group(1))
+                try:
+                  new_val = dtype(new_val)
+                except:
+                  logging.exception('Could not convert the parsed value (%s) to the specifed data type (%s).'
+                                    % (new_val, dtype))
+                  raise
+
                 vals[prev_match_on_row:rowno] = prev_val
                 logging.debug('Setting value for rows %d:%d = %g' % (prev_match_on_row, rowno, prev_val))
 
@@ -427,6 +478,7 @@ class DataView():
 
             self.add_virtual_dimension(name, arr=vals)
             return
+
 
         if cache_fn_values:
             old_mask = self.get_mask().copy() # backup the mask
@@ -447,3 +499,57 @@ class DataView():
 
     def remove_virtual_dimensions(self):
         self._virtual_dims = {}
+
+    def _parse_settings(self, data):
+      '''
+      Parse a settings file (.set) into a dict (instruments) of dicts (settings).
+
+      data must be a qt.Data object.
+      '''
+      parsed_settings = {}
+
+      try:
+        set_path = data.get_settings_filepath()
+      except Exception as e:
+        logging.exception("Could not determine .set path from '%s'." % str(data))
+        raise
+
+      try:
+        with open(set_path, 'r') as f:
+          settings_string = f.read()
+      except Exception as e:
+        logging.exception("Could not load .set file from '%s'." % set_path)
+        raise
+
+      try:
+        header = re.match(r'(.+?)^Instrument: ', settings_string, flags=(re.MULTILINE | re.DOTALL)).group(1)
+        off = len(header)
+        parsed_settings['header'] = {'comments' : header}
+      except Exception as e:
+        logging.exception("Could not parse header in:\n\n%s" % settings_string)
+        raise
+
+      try:
+        m = re.split(r'^Instrument: (.+?)$', settings_string[off:], flags=(re.MULTILINE | re.DOTALL))
+        instrument_names = [ x.replace('\r','').replace('\n',' ').strip() for x in m[1::2] ]
+        instrument_attr_strings = m[2::2]
+        #logging.debug(instrument_names)
+      except Exception as e:
+        logging.exception("Could not parse instrument names in:\n\n%s" % settings_string)
+        raise
+
+      for instr_name, attr_string in zip(instrument_names, instrument_attr_strings):
+        try:
+          m = re.split(r'^\s+(.+?): (.+?)$', attr_string, flags=(re.MULTILINE | re.DOTALL))
+          attr_names = [ x.replace('\r','').replace('\n',' ').strip() for x in m[1::3] ]
+          attr_vals = m[2::3]
+          parsed_settings[instr_name] = dict(zip(attr_names, attr_vals))
+          #logging.debug("\n")
+          #logging.debug(instr_name)
+          #logging.debug(attr_names)
+        except Exception as e:
+          logging.exception("Could not parse atributes for '%s' from:\n\n%s" % (instr_name, attr_string))
+          raise
+
+      return parsed_settings
+

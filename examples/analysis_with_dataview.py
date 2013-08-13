@@ -87,13 +87,20 @@ logging.info("d['t'][::4] = " + str(d['t'][::4]))
 # Define virtual dimensions 
 ##############################################################################
 
-# virtual columns can be created by parsing comments in the data files
+# you can parse comments in the data files
 d.add_virtual_dimension('sweep_start_time', comment_regex='(?i)sweep_start_time\s*=\s*([e\d\.\+\-]*)')
-d.add_virtual_dimension('heater_current', comment_regex='(?i)heater_current\s*=\s*([e\d\.\+\-]*)')
 
-# or by defining an arbitrary function that takes the DataView object as an argument
+# you can also specify an explicit data type
+d.add_virtual_dimension('heater_current', comment_regex=('(?i)heater_current\s*=\s*([e\d\.\+\-]*)', np.float))
+
+# or define an arbitrary function that takes the DataView object as an argument
 d.add_virtual_dimension('absolute_time', lambda d: (d['sweep_start_time'] + d['t']),
                         cache_fn_values=True) # whether the function is evaluated immediately or only on demand
+
+# or parse values from the instrument settings files.
+# (But the files don't exist for these fake data sets.)
+#d.add_virtual_dimension('lockin_amp', from_set=('lockin1', 'amplitude'))
+#d.add_virtual_dimension('lockin_tau', from_set=('lockin1', 'tau', np.int))
 
 # You can now access the virtual dimensions just like the real data columns:
 logging.info("d['heater_current'][::11] = " + str(d['heater_current'][::11]))
