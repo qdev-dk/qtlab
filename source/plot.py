@@ -482,12 +482,7 @@ class Plot2DBase(Plot):
                     elif i + 1 < len(args) and isinstance(args[i+1], numpy.ndarray):
                         x = args[i]
                         y = args[i + 1]
-                        if 'yerr' in kwargs:
-                            data = numpy.column_stack((x, y, kwargs['yerr']))
-                            if valdim is None:
-                                valdim = 1
-                        else:
-                            data = numpy.column_stack((x, y))
+                        data = numpy.column_stack((x, y))
                         i += 2
                     else:
                         data = args[i]
@@ -508,8 +503,14 @@ class Plot2DBase(Plot):
                     kwargs['binary'] = False
                 elif 'binary' not in kwargs:
                     kwargs['binary'] = True
+
                 if 'yerr' in kwargs:
+                    assert len(kwargs['yerr']) == len(data), 'yerr must be a 1D vector of the same length as the data.'
+                    data = numpy.column_stack((data, kwargs['yerr']))
+                    if coorddim is None: coorddim = 0
+                    if valdim is None:   valdim = 1
                     kwargs['yerrdim'] = 2
+
                 data = Data(data=data, tempfile=tmp, binary=kwargs['binary'])
 
             else:
