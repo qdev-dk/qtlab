@@ -96,6 +96,8 @@ class DataView():
           if source_column_name != None:
             n = data.get_name()
             self._source_col = [n for i in range(data.get_npoints())]
+          else:
+            self._source_col = None
 
           self._comments = data.get_comment(include_row_numbers=True)
 
@@ -134,6 +136,8 @@ class DataView():
             self._source_col = [ [n for jj in range(l)] for n,l in zip(names,lens) ]
             #self._source_col = [ jj for jj in itertools.chain.from_iterable(self._source_col) ] # flatten
             self._source_col = list(itertools.chain.from_iterable(self._source_col)) # flatten
+          else:
+            self._source_col = None
           
           # keep only dimensions that could be parsed from all files
           self._dimensions = unmasked.keys()
