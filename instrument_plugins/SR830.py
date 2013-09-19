@@ -22,6 +22,7 @@ import logging
 import numpy as np
 import qt
 import time
+import re
 
 class SR830(Instrument):
     '''
@@ -103,37 +104,6 @@ class SR830(Instrument):
         self.add_parameter('in', type=types.FloatType, channels=(1,2,3,4),
             flags=Instrument.FLAG_GET,
             minval=-10.5, maxval=10.5, units='V', format='%.3f')
-        self.add_parameter('sensitivity', type=types.IntType,
-            flags=Instrument.FLAG_GETSET,
-            format_map={
-                0 : "2nV",
-                1 : "5nV",
-                2 : "10nV",
-                3 : "20nV",
-                4 : "50 nV",
-                5 : "100nV",
-                6 : "200nV",
-                7 : "500nV",
-                8 : "1muV",
-                9 : "2muV",
-                10 : "5muV",
-                11 : "10muV",
-                12 : "20muV",
-                13 : "50muV",
-                14 : "100muV",
-                15 : "200muV",
-                16 : "500muV",
-                17 : "1mV",
-                18 : "2mV",
-                19 : "5mV",
-                20 : "10mV",
-                21 : "20mV",
-                22 : "50mV",
-                23 : "100mV",
-                24 : "200mV",
-                25 : "500mV",
-                26 : "1V"
-            })
         self.add_parameter('reserve', type=types.IntType,
                            flags=Instrument.FLAG_GETSET,
                            format_map={0:'High reserve', 1:'Normal', 2:'Low noise'})
@@ -173,6 +143,46 @@ class SR830(Instrument):
         self.add_parameter('output_overload', type=types.BooleanType,
                            flags=Instrument.FLAG_GET,
                            format_map={False:'normal', True:'overload'})
+
+        self._sensitivities_symbolic = {
+                0 : "2nV",
+                1 : "5nV",
+                2 : "10nV",
+                3 : "20nV",
+                4 : "50nV",
+                5 : "100nV",
+                6 : "200nV",
+                7 : "500nV",
+                8 : "1muV",
+                9 : "2muV",
+                10 : "5muV",
+                11 : "10muV",
+                12 : "20muV",
+                13 : "50muV",
+                14 : "100muV",
+                15 : "200muV",
+                16 : "500muV",
+                17 : "1mV",
+                18 : "2mV",
+                19 : "5mV",
+                20 : "10mV",
+                21 : "20mV",
+                22 : "50mV",
+                23 : "100mV",
+                24 : "200mV",
+                25 : "500mV",
+                26 : "1V"
+            }
+        self.add_parameter('sensitivity', type=types.IntType,
+            flags=Instrument.FLAG_GETSET,
+            format_map=self._sensitivities_symbolic)
+            
+        # convert to volts
+        unit_conversion = {'n': 1e-9, 'mu': 1e-6, 'm': 1e-3, '': 1.}
+        self._sensitivities = [ (x[0],
+                                 (lambda m: int(m[0])*unit_conversion[m[1]])(re.match(r'\s*(\d+)\s*([nmu]*)V', x[1]).groups())
+                                 ) for x in self._sensitivities_symbolic.iteritems() ]
+        self._sensitivities = dict(self._sensitivities)
 
         self.add_function('reset')
         self.add_function('get_all')
@@ -353,7 +363,7 @@ class SR830(Instrument):
           logging.debug('sign_changed = %s' % str(sign_changed))
           logging.debug('min(sign_changed) = %d < derivative_sign_changes = %d --> %s' % (sign_changed.min(), derivative_sign_changes, str(sign_changed.min() < derivative_sign_changes) ))
         
-    def get_XY(self, ovl=False, soft_averages=None, instruments=None):
+    def get_XY(self, ovl=False, soft_averages=None, instruments=None, auto_sensitivity=False):
         '''
         Get the current (X,Y) tuple.
         
@@ -366,6 +376,7 @@ class SR830(Instrument):
           instruments   --- return a list of (X,Y) tuples from the specified
                             list of instruments instead of 'self.' This way you
                             can do soft_averages on multiple instruments in parallel.
+          auto_sensitivity --- tune sensitivity automatically if it is completely wrong
         '''
         assert soft_averages == None or soft_averages > .1, 'soft_averages ~< 0 does not make sense.'
         
@@ -375,26 +386,48 @@ class SR830(Instrument):
 
         assert soft_averages == None or max_tau > 0.200, 'soft_averages on ~< 100ms timescales is not a good idea.'
         
-        xy = np.zeros((len(insts), 2), dtype=np.float)
+        while True: # repeat until value is in range
         
-        if soft_averages != None:
-          samples = np.max((2, int(np.round(3 * soft_averages))))
-          dt = soft_averages*max_tau / samples
-          for j in range(samples):
-            t0 = time.time()
+          xy = np.zeros((len(insts), 2), dtype=np.float)
+          
+          if soft_averages != None:
+            samples = np.max((2, int(np.round(3 * soft_averages))))
+            dt = soft_averages*max_tau / samples
+            for j in range(samples):
+              t0 = time.time()
+              xy[:,0] += np.array([ i.read_output(1, ovl) for i in insts ])
+              xy[:,1] += np.array([ i.read_output(2, ovl) for i in insts ])
+              qt.msleep(np.max((0., dt - (time.time() - t0))))
+            xy /= samples
+          else:
             xy[:,0] += np.array([ i.read_output(1, ovl) for i in insts ])
             xy[:,1] += np.array([ i.read_output(2, ovl) for i in insts ])
-            qt.msleep(np.max((0., dt - (time.time() - t0))))
-          xy /= samples
-        else:
-          xy[:,0] += np.array([ i.read_output(1, ovl) for i in insts ])
-          xy[:,1] += np.array([ i.read_output(2, ovl) for i in insts ])
 
-        
-        if instruments == None:
-          return xy[0,:]
-        else:
-          return xy
+          if auto_sensitivity:
+            out_of_range = False
+            sensitivity = np.array([ i.get_sensitivity() for i in insts ])
+            for i in range(len(insts)):
+              abs_val = np.abs(complex(*(xy[i])))
+              current_range = self._sensitivities[sensitivity[i]]
+              if abs_val > 0.9*current_range:
+                if sensitivity[i] == len(self._sensitivities)-1:
+                  logging.warn('Cannot increase sensitivity anymore!')
+                else:
+                  insts[i].set_sensitivity(sensitivity[i] + 1)
+                  out_of_range = True
+              elif abs_val < current_range/11.:
+                if sensitivity[i] == 0:
+                  logging.warn('Cannot decrease sensitivity anymore!')
+                else:
+                  insts[i].set_sensitivity(sensitivity[i] - 1)
+                  out_of_range = True
+
+            if out_of_range: continue # remeasure
+          
+          if instruments == None:
+            return xy[0,:]
+          else:
+            return xy
         
     def do_get_X(self, ovl=False):
         '''
@@ -584,6 +617,12 @@ class SR830(Instrument):
         self.direct_output()
         logging.debug(__name__ + ' : reading sensitivity from instrument')
         return float(self._visainstrument.ask('SENS?'))
+
+    def sensitivity_to_volts(self, index):
+        '''
+        converts the integer returned by get_sensitivity() to the corresponding voltage.
+        '''
+        return self._sensitivities[index]
 
     def do_get_phase(self):
         '''
