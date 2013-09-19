@@ -173,7 +173,7 @@ class DataView():
 
     def __getitem__(self, index):
         '''
-        Access the unmasked data.
+        Access the data.
 
         index may be a slice or a string, in which case it is interpreted
         as a dimension name.
@@ -185,7 +185,7 @@ class DataView():
 
     def copy(self, copy_data=False):
         '''
-        Make a deep copy of the view.
+        Make a copy of the view. The returned copy will always have an independent mask.
         
         copy_data -- whether the underlying data is also deep copied.
         '''
@@ -383,7 +383,13 @@ class DataView():
         '''
         if name in self._virtual_dims.keys():
             d = self._virtual_dims[name]['fn'](self)
-            if len(d) == len(self._mask): d = d[~(self._mask)] # The function may return masked or unmasked data...
+            if len(d) == len(self._mask): # The function may return masked or unmasked data...
+              # The function returned unmasked data so apply the mask
+              try:
+                d = d[~(self._mask)] # This works for ndarrays
+              except:
+                # workaround to mask native python arrays
+                d = [ x for i,x in enumerate(d) if not self._mask[i] ]
             return d
         else:
             d = self._data[~(self._mask),self._dimension_indices[name]]
@@ -418,7 +424,7 @@ class DataView():
             assert self._settings != None, '.set files were not successfully parsed during dataview initialization.'
 
         if arr != None:
-            assert arr.shape == tuple([len(self._mask)]), '"arr" must be a 1D vector of the same length as the real data columns. If you want to do something fancier, specify your own fn.'
+            assert len(arr) == len(self._mask), '"arr" must be a vector of the same length as the real data columns. If you want to do something fancier, specify your own fn.'
 
             self.add_virtual_dimension(name,
                                        (lambda dd,arr=arr: arr),
@@ -439,11 +445,18 @@ class DataView():
               else:
                 regex = comment_regex[0]
                 dtype = comment_regex[1]
-            vals = np.zeros(len(self._mask), dtype=dtype)
-            if dtype == np.float: vals += np.nan # initialize to NaN instead of zeros
+            try:
+              if issubclass(dtype, basestring):
+                raise Exception('Do not store strings in numpy arrays (because it "works" but the behavior is unintuitive, i.e. only the first character is stored if you just specify dtype=str).')
+              vals = np.zeros(len(self._mask), dtype=dtype)
+              if dtype == np.float: vals += np.nan # initialize to NaN instead of zeros
+              prev_val = np.nan
+            except:
+              logging.warn("%s does not seem to be a numpy data type. The virtual column '%s' will be a native python array instead, which may be very slow." % (str(dtype), name))
+              vals = [None for jjj in range(len(self._mask))]
+              prev_val = None
 
             prev_match_on_row = 0
-            prev_val = np.nan
 
             #logging.debug(self._comments)
 
@@ -471,14 +484,17 @@ class DataView():
                                     % (new_val, dtype))
                   raise
 
-                vals[prev_match_on_row:rowno] = prev_val
-                logging.debug('Setting value for rows %d:%d = %g' % (prev_match_on_row, rowno, prev_val))
+                if isinstance(vals, np.ndarray): vals[prev_match_on_row:rowno] = prev_val
+                else: vals[prev_match_on_row:rowno] = ( prev_val for jjj in range(rowno-prev_match_on_row) )
+                logging.debug('Setting value for rows %d:%d = %s' % (prev_match_on_row, rowno, prev_val))
 
                 prev_match_on_row = rowno
                 prev_val = new_val
 
-            logging.debug('Setting value for (remaining) rows %d: = %g' % (prev_match_on_row, prev_val))
-            vals[prev_match_on_row:] = prev_val
+            logging.debug('Setting value for (remaining) rows %d: = %s' % (prev_match_on_row, prev_val))
+            if isinstance(vals, np.ndarray): vals[prev_match_on_row:] = prev_val
+            else: vals[prev_match_on_row:] = ( prev_val for jjj in range(len(vals)-prev_match_on_row) )
+            
 
             self.add_virtual_dimension(name, arr=vals)
             return
