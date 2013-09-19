@@ -17,6 +17,8 @@
 
 from instrument import Instrument
 from lib import tcpinstrument
+import visa
+from visa import VisaIOError
 import types
 import logging
 import numpy
@@ -46,7 +48,12 @@ class Gigatronics_2550B(Instrument):
         logging.info(__name__ + ' : Initializing instrument Gigatronics_2550B')
         Instrument.__init__(self, name, tags=['physical'])
         
-        self._visainstrument = tcpinstrument.TCPInstrument(address)
+        if re.match('(?i)gpib', address):
+          logging.info('Initializing Gigatronics using VISA.')
+          self._visainstrument = visa.instrument(address)
+        else:
+          logging.info('Initializing Gigatronics using LAN.')
+          self._visainstrument = tcpinstrument.TCPInstrument(address)
 
         self.add_parameter('power',
             flags=Instrument.FLAG_GETSET, units='dBm', minval=-135, maxval=25, type=types.FloatType)
