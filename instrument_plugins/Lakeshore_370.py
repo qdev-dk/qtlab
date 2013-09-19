@@ -24,6 +24,7 @@ import re
 import math
 import time
 import numpy as np
+import qt
 
 class Lakeshore_370(Instrument):
 
@@ -39,7 +40,8 @@ class Lakeshore_370(Instrument):
           visaargs['data_bits'] = 7
           visaargs['stop_bits'] = 1
         self._visa = visa.instrument(self._address,
-                                     term_chars='\n', # This is set on the screen (behind "Computer Interface")
+                                     term_chars='\n', # This is set on the physical screen (behind "Computer Interface")
+                                     timeout=10., # seconds
                                      **visaargs)
         
         self._channels = kwargs.get('channels', (1, 2, 5, 6))
@@ -269,6 +271,7 @@ class Lakeshore_370(Instrument):
 
     def reset(self):
         self.__write('*RST')
+        qt.msleep(.5)
 
     def get_all(self):
         self.get_identification()
@@ -309,10 +312,13 @@ class Lakeshore_370(Instrument):
           
 
     def __ask(self, msg):
-        return self._visa.ask("%s" % msg).replace('\r','')
+        m = self._visa.ask("%s" % msg).replace('\r','')
+        qt.msleep(.01)
+        return m
 
     def __write(self, msg):
         self._visa.write("%s" % msg)
+        qt.msleep(.5)
 
     def do_get_identification(self):
         return self.__ask('*IDN?')
@@ -333,7 +339,6 @@ class Lakeshore_370(Instrument):
         ch = self.get_scanner_channel()
         cmd = 'SCAN %d,%d' % (ch, 1 if val else 0)
         self.__write(cmd)
-        time.sleep(.1)
         self.get_scanner_auto()
         self.get_scanner_channel()
         
@@ -345,18 +350,21 @@ class Lakeshore_370(Instrument):
         auto = self.get_scanner_auto()
         cmd = 'SCAN %d,%d' % (val, 1 if auto else 0)
         self.__write(cmd)
-        time.sleep(.1)
         self.get_scanner_auto()
         self.get_scanner_channel()
 
     def do_get_kelvin(self, channel):
         ans = float(self.__ask('RDGK? %s' % channel))
-        if self._logger != None: self._logger('kelvin', channel, ans)
+        if self._logger != None:
+          try: self._logger('kelvin', channel, ans)
+          except: logging.exception('Could not log kelvin%s', channel)
         return ans
         
     def do_get_resistance(self, channel):
         ans = float(self.__ask('RDGR? %s' % channel))
-        if self._logger != None: self._logger('resistance', channel, ans)
+        if self._logger != None:
+          try: self._logger('resistance', channel, ans)
+          except: logging.exception('Could not log resistance%s', channel)
         return ans
         
     def do_get_resistance_range(self, channel):
@@ -398,8 +406,9 @@ class Lakeshore_370(Instrument):
     def do_set_filter_settle_time(self, val, channel):
         cmd = 'FILTER %s,1,%d,80' % (channel,int(np.round(val)))
         self.__write(cmd)
-        time.sleep(.1)
         getattr(self, 'get_filter_settle_time%s' % channel)()
+        getattr(self, 'get_filter_on%s' % channel)()
+        getattr(self, 'get_filter_reset_threshold%s' % channel)()
         
     def do_get_filter_reset_threshold(self, channel):
         ans = self.__ask('FILTER? %s' % channel)
@@ -415,7 +424,6 @@ class Lakeshore_370(Instrument):
         
     def do_set_heater_range(self, val):
         self.__write('HTRRNG %d' % val)
-        time.sleep(.1)
         self.get_heater_range()
         
     def do_get_heater_status(self):
@@ -428,7 +436,6 @@ class Lakeshore_370(Instrument):
 
     def do_set_mode(self, mode):
         self.__write('MODE %d' % mode)
-        time.sleep(.1)
         self.get_mode()
 
     def local(self):
@@ -442,9 +449,15 @@ class Lakeshore_370(Instrument):
         return int(ans)
 
     def do_set_temperature_control_mode(self, mode):
+        setp = self.get_temperature_control_setpoint()
+
         self.__write('CMODE %d' % mode)
-        time.sleep(.1)
         self.get_temperature_control_mode()
+
+        new_setp = self.get_temperature_control_setpoint()
+        if new_setp != setp:
+          logging.info('setpoint changed from %g to %g when changing CMODE to %s. Setting it back...' % (setp, new_setp, mode))
+          self.set_temperature_control_setpoint(setp)
 
     def do_get_temperature_control_pid(self):
         ans = self.__ask('PID?')
@@ -461,7 +474,6 @@ class Lakeshore_370(Instrument):
         assert val[2] >= 0 and val[2] < 2500, 'D out of range.'
         cmd = 'PID %.5g,%.5g,%.5g' % (val[0], val[1], val[2])
         self.__write(cmd)
-        time.sleep(.1)
         self.get_temperature_control_pid()
        
     def do_get_temperature_control_setpoint(self):
@@ -469,9 +481,13 @@ class Lakeshore_370(Instrument):
         return float(ans)
         
     def do_set_temperature_control_setpoint(self, val):
-        self.__write('SETP %.3E' % (val))
-        time.sleep(.1)
-        self.get_temperature_control_setpoint()
+        for attempts in range(5):
+          self.__write('SETP %.3E' % (val))
+          setp = self.get_temperature_control_setpoint()
+          if np.abs(setp - val) < 1e-5: return # all is well
+          logging.warn('Failed to change setpoint to %g (instead got %g). Retrying...' % (val, setp))
+          qt.msleep(5.)
+        logging.warn('Final attempt to change setpoint to %g failed (instead got %g).' % (val, setp))
         
     def do_get_temperature_control_channel(self):
         ans = self.__ask('CSET?')
