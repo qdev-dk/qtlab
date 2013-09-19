@@ -35,11 +35,16 @@ def write(quantity, channel, value, address='K:'):
   datestr = __time_to_datestr(tt)
   
   target_dir = os.path.join(address, datestr)
-  if not os.path.exists(target_dir): os.makedirs(target_dir)
+  try:
+    if not os.path.exists(target_dir): os.makedirs(target_dir)
+  except:
+    logging.exception('Failed to write %s%s value %g because "%s" could not be accessed/created.' % (quantity, channel, value, target_dir))
+    raise
   
   fname = os.path.join(target_dir, 'CH{0} {1} {2}.log'.format(channel, {'kelvin': 'T', 'resistance': 'R'}[quantity], datestr))
   try:
     with open(fname,'a') as f:
       f.write(tt.strftime('%d-%m-%y,%H:%M:%S,') + ("%.6E\n" % value))
   except Exception as e:
-    logging.exception('Failed to log temperature %g.' % value)
+    logging.exception('Failed to write %s%s value %g to log file "%s".' % (quantity, channel, value, fname))
+    raise
