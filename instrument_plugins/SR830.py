@@ -49,7 +49,7 @@ class SR830(Instrument):
         logging.info(__name__ + ' : Initializing instrument')
         Instrument.__init__(self, name, tags=['physical'])
         self._address = address
-        self._visainstrument = visa.instrument(self._address)
+        self._visainstrument = visa.instrument(self._address, timeout=5.)
 
         self.add_parameter('mode',
            flags=Instrument.FLAG_SET,
@@ -188,10 +188,13 @@ class SR830(Instrument):
         self.add_function('get_all')
         self.add_function('reset_averaging')
 
+        self.clear_output_buffer()
         if reset:
             self.reset()
         else:
             self.get_all()
+
+        self.direct_output()
 
     # Functions
     def reset(self):
@@ -206,7 +209,18 @@ class SR830(Instrument):
         '''
         logging.info(__name__ + ' : Resetting instrument')
         self._visainstrument.write('*RST')
+        self.clear_output_buffer()
         self.get_all()
+
+    def clear_output_buffer(self):
+        ''' Make sure there are no old replies in the visa buffer. '''
+        old_timeout = self._visainstrument.timeout
+        self._visainstrument.timeout = 0.3
+        while True:
+          try: r = self._visainstrument.read()
+          except: break
+          if len(r) == 0: break
+        self._visainstrument.timeout = old_timeout
 
     def get_all(self):
         '''
@@ -290,17 +304,25 @@ class SR830(Instrument):
         3 : "R",
         4 : "P"
         }
-        self.direct_output()
+        #self.direct_output()
         if parameters.__contains__(output):
             logging.debug(__name__ + ' : Reading parameter from instrument: %s ' %parameters.get(output))
-            if ovl:
-                self.get_input_overload()
-                self.get_time_constant_overload()
-                self.get_output_overload()
-            readvalue = float(self._visainstrument.ask('OUTP?%s' %output))
+            max_attempts = 5
+            for attempt in range(max_attempts):
+              try:
+                if ovl:
+                    self.get_input_overload()
+                    self.get_time_constant_overload()
+                    self.get_output_overload()
+                readvalue = float(self._visainstrument.ask('OUTP?%s' %output))
+                return readvalue
+              except:
+                logging.exception('Attempt %d/%d to read output from SR830 failed.' (1+attempt, max_attempts))
+                qt.msleep(attempt**2 * 1.)
+                self.clear_output_buffer()
+                if attempt == max_attempts-1: raise # last attempt failed
         else:
-            print 'Wrong output requested.'
-        return readvalue
+            raise Exception('Invalid output requested: %s' % str(output))
 
     def reset_averaging(self, instruments=None):
         '''
@@ -384,7 +406,7 @@ class SR830(Instrument):
         taus = [ i.get_tau_in_seconds() for i in insts ]
         max_tau = np.array(taus).max()
 
-        assert soft_averages == None or max_tau > 0.200, 'soft_averages on ~< 100ms timescales is not a good idea.'
+        assert soft_averages == None or max_tau > 0.090, 'soft_averages on ~< 100ms timescales is not a good idea.'
         
         while True: # repeat until value is in range
         
@@ -481,7 +503,7 @@ class SR830(Instrument):
         Output:
             frequency (float) : frequency in Hz
         '''
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : reading frequency from instrument')
         return float(self._visainstrument.ask('FREQ?'))
 
@@ -495,7 +517,7 @@ class SR830(Instrument):
         Output:
             frequency (float) : frequency in Hz
         '''
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : reading frequency from instrument')
         return float(self._visainstrument.ask('SLVL?'))
 
@@ -529,7 +551,7 @@ class SR830(Instrument):
             None
         '''
 
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : setting time constant on instrument to %s'%(timeconstant))
         self._visainstrument.write('OFLT %s' % timeconstant)
         self.update_value('tau_in_seconds', self.tau_index_to_seconds(timeconstant))
@@ -544,7 +566,7 @@ class SR830(Instrument):
             time constant (integer) : integer from 0 to 19
         '''
 
-        self.direct_output()
+        #self.direct_output()
         r = self._visainstrument.ask('OFLT?')
         ind = int(r)
         secs = self.tau_index_to_seconds(ind)
@@ -604,7 +626,7 @@ class SR830(Instrument):
             None
         '''
 
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : setting sensitivity on instrument to %s'%(sens))
         self._visainstrument.write('SENS %d' % sens)
 
@@ -614,7 +636,7 @@ class SR830(Instrument):
             Output:
             sensitivity (integer) : integer from 0 to 26
         '''
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : reading sensitivity from instrument')
         return float(self._visainstrument.ask('SENS?'))
 
@@ -634,7 +656,7 @@ class SR830(Instrument):
         Output:
             phase (float) : reference phase shit in degree
         '''
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : reading frequency from instrument')
         return float(self._visainstrument.ask('PHAS?'))
 
