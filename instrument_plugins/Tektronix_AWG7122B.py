@@ -66,8 +66,17 @@ class Tektronix_AWG7122B(Instrument):
         self._values['files'] = {}
 
         # Add parameters
+        self.add_parameter('run_state', type=types.StringType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            format_map={'run': 'running',
+                        'stop': 'stopped',
+                        'arm': 'waiting for trigger'})
         self.add_parameter('trigger_mode', type=types.StringType,
-            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET)
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            format_map={'cont': 'continuous',
+                        'trig': 'triggered',
+                        'gat': 'gated',
+                        'seq': 'sequence'})
         self.add_parameter('trigger_impedance', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
             minval=49, maxval=2e3, units='Ohm')
@@ -82,7 +91,7 @@ class Tektronix_AWG7122B(Instrument):
             channel_prefix='ch%d_')
         self.add_parameter('amplitude', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
-            channels=(1, 2), minval=0, maxval=2, units='Volts', channel_prefix='ch%d_')
+            channels=(1, 2), minval=0.5, maxval=1.0, units='Volts', channel_prefix='ch%d_')
         #self.add_parameter('offset', type=types.FloatType,
         #    flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
         #    channels=(1, 2), minval=-2, maxval=2, units='Volts', channel_prefix='ch%d_')
@@ -100,14 +109,14 @@ class Tektronix_AWG7122B(Instrument):
             channels=(1, 2), minval=-2, maxval=2, units='Volts', channel_prefix='ch%d_')
         self.add_parameter('status', type=types.StringType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
-            channels=(1, 2),channel_prefix='ch%d_')
+            channels=(1, 2), channel_prefix='ch%d_',
+            format_map={'on': 'output on',
+                        'off': 'output off'})
 
         # Add functions
         self.add_function('reset')
         self.add_function('get_all')
         self.add_function('clear_waveforms')
-        self.add_function('set_trigger_mode_on')
-        self.add_function('set_trigger_mode_off')
         self.add_function('set_trigger_impedance_1e3')
         self.add_function('set_trigger_impedance_50')
 
@@ -142,8 +151,8 @@ class Tektronix_AWG7122B(Instrument):
             None
         '''
         logging.info(__name__ + ' : Reading all data from instrument')
-        logging.warning(__name__ + ' : get all not yet fully functional')
 
+        self.get_run_state()
         self.get_trigger_mode()
         self.get_trigger_impedance()
         self.get_trigger_level()
@@ -178,32 +187,6 @@ class Tektronix_AWG7122B(Instrument):
         self._visainstrument.write('SOURCE1:WAVEFORM ""')
         self._visainstrument.write('SOURCE2:WAVEFORM ""')
 
-    def set_trigger_mode_on(self):
-        '''
-        Sets the trigger mode to 'On'
-
-        Input:
-            None
-
-        Output:
-            None
-        '''
-        logging.debug(__name__  +' : Set trigger mode tot TRIG')
-        self._visainstrument.write('AWGC:RMOD TRIG')
-
-    def set_trigger_mode_off(self):
-        '''
-        Sets the trigger mode to 'Cont'
-
-        Input:
-            None
-
-        Output:
-            None
-        '''
-        logging.debug(__name__  +' : Set trigger mode to CONT')
-        self._visainstrument.write('AWGC:RMOD CONT')
-
     def set_trigger_impedance_1e3(self):
         '''
         Sets the trigger impedance to 1 kOhm
@@ -234,32 +217,33 @@ class Tektronix_AWG7122B(Instrument):
     def do_get_trigger_mode(self):
         '''
         Reads the trigger mode from the instrument
-
-        Input:
-            None
-
-        Output:
-            mode (string) : 'Trig' or 'Cont' depending on the mode
         '''
-        logging.debug(__name__  + ' : Get trigger mode from instrument')
-        return self._visainstrument.ask('AWGC:RMOD?')
+        return self._visainstrument.ask('AWGC:RMOD?').lower().strip()
 
     def do_set_trigger_mode(self, mod):
         '''
         Sets trigger mode of the instrument
-
-        Input:
-            mod (string) : Either 'Trig' or 'Cont' depending on the mode
-
-        Output:
-            None
         '''
-        if (mod.upper()=='TRIG'):
-            self.set_trigger_mode_on()
-        elif (mod.upper()=='CONT'):
-            self.set_trigger_mode_off()
+        self._visainstrument.write('AWGC:RMOD %s' % (mod.upper().strip()))
+
+    def do_get_run_state(self):
+        '''
+        Reads the trigger mode from the instrument
+        '''
+        int_to_state = {0: 'stop', 1: 'arm', 2: 'run'}
+        return int_to_state[int(self._visainstrument.ask('AWGC:RST?'))]
+
+    def do_set_run_state(self, state):
+        '''
+        Sets trigger mode of the instrument. Must be 'run' or 'stop'.
+        '''
+        assert state != 'arm', '"arm" cannot be set here. Use trigger_mode and set this to "run".'
+        if state == 'run':
+          self._visainstrument.write('AWGC:RUN')
+        elif  state == 'stop':
+          self._visainstrument.write('AWGC:STOP')
         else:
-            logging.error(__name__ + ' : Unable to set trigger mode to %s, expected "TRIG" or "CONT"' %mod)
+          raise Exception('Unknown run state: %s' % state)
 
     def do_get_trigger_impedance(self):
         '''
