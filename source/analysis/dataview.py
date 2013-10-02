@@ -50,7 +50,7 @@ class DataView():
     See qtlab/examples/analysis_with_dataview.py for example use.
     '''
 
-    def __init__(self, data, deep_copy=False, source_column_name='data_source', **kwargs):
+    def __init__(self, data, deep_copy=False, source_column_name='data_source', fill_value=None, **kwargs):
         '''
         Create a new view of an existing data object for post-processing.
         The original data object will not be modified.
@@ -64,6 +64,8 @@ class DataView():
           source_column_name -- specifies the name of the (virtual) column that tells which
                                 data object the row originates from. Specify None, if
                                 you don't want this column to be added.
+          fill_value         -- fill value for columns that do not exist in all data objects.
+                                Default is None, in which case the column is omitted entirely.
         '''
 
         self._virtual_dims = {}
@@ -111,19 +113,35 @@ class DataView():
           raise
 
         except Exception as e: # probably a sequence of Data objects then
-          self._dimensions = data[0].get_dimension_names()
+          self._dimensions = set(itertools.chain( *(dd.get_dimension_names() for dd in data) ))
           
           unmasked = {}
           for dim in self._dimensions:
             unmasked[dim] = []
             for dat in data:
+              if len(dat.get_dimension_names()) == 0:
+                logging.warn("Data object '%s' seems to contain zero columns. Skipping it..." % (str(dat)))
+                break
+
+              n_rows = len(dat[:,0])
+              if n_rows == 0:
+                logging.warn("Data object '%s' seems to contain zero rows. Skipping it..." % (str(dat)))
+                break
+
               try:
                 unmasked[dim].append(dat[dim])
               except:
-                # ignore dimensions that don't exist in all data objects
-                del unmasked[dim]
-                logging.warn("Dimensions '%s' does not exist in Data object '%s'." % (dim, str(dat)))
-                break
+                msg = "Dimension '%s' does not exist in Data object '%s'. " % (dim, str(dat))
+                if fill_value == None:
+                  # ignore dimensions that don't exist in all data objects
+                  del unmasked[dim]
+                  msg += ' Omitting the dimension.'
+                  logging.warn(msg)
+                  break
+                else:
+                  unmasked[dim].append(fill_value + np.zeros(n_rows, dtype=type(fill_value)))
+                  msg += ' Using fill_value = %s (for %d rows)' % (str(fill_value), len(unmasked[dim][-1]))
+                  logging.warn(msg)
 
             # concatenate rows from all files
             if dim in unmasked.keys():
