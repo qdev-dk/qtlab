@@ -36,12 +36,32 @@ class Tektronix_AWG7122B(Instrument):
     <name> = instruments.create('name', 'Tektronix_AWG7122B', address='<GPIB address>',
         reset=<bool>)
 
-    think about:    clock, waveform length
+    
+		############################################################
+		# Example script that generates a 10 MHz sine with 64 points
+		############################################################
+		
+		import qt
+		import numpy as np
 
-    TODO:
-    1) Get All
-    2) Remove test_send??
-    3) Add docstrings
+		awg1 = qt.instruments['awg1']
+
+		freq = 10e6
+		pts_per_wf = 64
+
+		wf1 = np.sin(2*np.pi*np.arange(pts_per_wf,dtype=np.int)/float(pts_per_wf)) # RF sent to the sample
+		awg1.send_waveform(wf1, 'ch1_wf')    # The waveform name here is arbitrary
+		awg1.set_ch1_waveform_name('ch1_wf')
+
+		awg1.set_ch1_amplitude(0.5)
+
+		awg1.set_clock(freq * pts_per_wf)
+
+		awg1.set_ch1_status('on')
+		awg1.set_trigger_mode('cont')
+		awg1.set_run_state('run')
+		
+		
     '''
 
     def __init__(self, name, address, reset=False):
