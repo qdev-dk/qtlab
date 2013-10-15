@@ -260,34 +260,66 @@ class SIM900(Instrument):
     
     #assert(False)
 
-  def _set_voltage(self, port, voltage):
-    if not self._ch_enabled[port-1]:
-      logging.warn('Port %d is disabled.' % port)
-      return
-
-    target_voltage = np.round(voltage, decimals=3)
-    if np.abs(target_voltage) < 1e-4: target_voltage = 0.   # the SIM doesn't like the minus in front of zero.
-    logging.debug(__name__ + ' : setting port %s voltage to %s V' % (port, target_voltage))
-    
-    stepsize = self.get_ramp_stepsize()
-    delay = self.get_ramp_delaytime()
-    
+  def set_voltages(self, port_to_voltage, update_attribute_value=True):
+    '''
+      port_to_voltage --- should be a dictionary { port no: voltage }, e.g. {1: -0.5, 5: 0.0}
+    '''
     for attempt in range(np.max(( 1, self._retries_on_set_error ))):
-      old = self._get_voltage(port)
-      if np.isnan(old): old = target_voltage
-    
-      for v in np.linspace(old, target_voltage, 2 + int(np.abs(target_voltage-old)/stepsize)):
-        time.sleep(delay)  # wait time between steps
-        self._write('SNDT %s,"VOLT %s"' % (port, v))
+      stepsize = self.get_ramp_stepsize()
+      delay = self.get_ramp_delaytime()
       
-      if self._retries_on_set_error > 0: # verify that the correct voltage was set
-        new_voltage = getattr(self, 'get_port%d_voltage' % port)()
-        if np.abs(new_voltage - target_voltage) < 0.0005:
-          return # success
-        logging.warn('Attempt #%d to set voltage to %g for port %d failed.' % (attempt, target_voltage, port))
-        time.sleep(.5*(1+attempt))
+      target_voltage = {}
+      old = {}
+      steps = {}
+      done = {}
+      for port in port_to_voltage.keys():
+        if not self._ch_enabled[port-1]:
+          logging.warn('Port %d is disabled.' % port)
+          return
 
-    logging.warn('The desired output voltage %g for port %d was not set!' % (target_voltage, port))
+        target_voltage[port] = np.round(port_to_voltage[port], decimals=3)
+        if np.abs(target_voltage[port]) < 1e-4: target_voltage[port] = 0.   # the SIM doesn't like the minus in front of zero.
+        logging.debug(__name__ + ' : setting port %s voltage to %s V' % (port, target_voltage[port]))
+        
+        old[port] = self._get_voltage(port)
+        steps[port] = np.linspace(old[port], target_voltage[port], 2 + int(np.abs(target_voltage[port]-old[port])/stepsize))
+        done[port] = False
+      
+      for i in range(max( len(s) for s in steps.values() )):
+        for port in port_to_voltage.keys():
+          if done[port]: continue # This port is already done ramping
+
+          if np.isnan(old[port]): # previous value invalid?
+            old[port] = target_voltage[port]
+            done[port] = True
+      
+          if i < len(steps[port]):
+            self._write('SNDT %s,"VOLT %s"' % (port, steps[port][i]))
+            if i == len(steps[port]) - 1:
+              done[port] = True
+              if update_attribute_value:
+                self.update_value('port%d_voltage' % port, float(steps[port][i]))
+
+        time.sleep(delay)  # wait time between steps
+          
+      if self._retries_on_set_error > 0: # verify that the correct voltage was set
+        success = {}
+        for port in port_to_voltage.keys():
+          new_voltage = getattr(self, 'get_port%d_voltage' % port)()
+          success[port] = ( np.abs(new_voltage - target_voltage[port]) < 0.0005 )
+          if not success[port]:
+            logging.warn('Attempt #%d to set voltage to %g for port %d failed.' % (attempt, target_voltage[port], port))
+        if all(success.values()):
+          return
+        else:
+          time.sleep(.05*(1+attempt)) # go back to beginning and try again
+      else:
+        return # don't check for success
+
+    logging.warn('The desired output voltage %g for port %d was not set!' % (target_voltage[port], port))
+
+  def _set_voltage(self, port, voltage):
+    self.set_voltages({port: voltage}, update_attribute_value=False)
 
   def _get_voltage(self, port):
     if not self._ch_enabled[port-1]:
