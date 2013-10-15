@@ -246,6 +246,14 @@ class bluefors_log_reader(Instrument):
       '''
       return self.get_temperature(channel, t)
 
+    def __line_to_datetime_val_pair(self, datestr, timestr, valstr):
+        dateparts = datestr.split('-')
+        timeparts = timestr.split(':')
+        parsed_time = datetime.datetime(int('20'+(dateparts[2])), int(dateparts[1]), int(dateparts[0]), int(timeparts[0]), int(timeparts[1]), int(timeparts[2]), tzinfo=tz.tzlocal())
+        val = float(valstr)
+        return [ parsed_time, val ]
+
+      
     def get_temperature(self, channel, t=None):
         '''
         Gets the temperature of channel at time t.
@@ -268,19 +276,21 @@ class bluefors_log_reader(Instrument):
             fname = os.path.join(self._address, datestr, 'CH{0} T {1}.log'.format(channel, datestr))
 
             try:
-              logging.debug('Loading T%d data for %s.' % (channel, str(tt)))
               data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'temperature'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
-              # convert the date & time strings to a datetime object
-              data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
+              logging.debug('Loaded R%d data for %s.' % (channel, str(tt)))
+            except Exception as e:
+              if datetime.datetime.now(tz.tzlocal()) > tt: # The exception is normal if tt is in the future.
+                logging.debug('Failed to load temperature data from %s).' % (fname))
+              continue
+
+            try:
+              data = np.array([ self.__line_to_datetime_val_pair(*d) for d in data ])
               if all_data == None:
                 all_data = data
               else:
                 all_data = np.concatenate((all_data, data), axis=0)
-               
             except Exception as e:
-              if datetime.datetime.now(tz.tzlocal()) > tt: # The exception is normal if tt is in the future.
-                logging.debug('Failed to load temperature data for %s.' % str(tt))
-              pass
+              logging.exception('Failed to parse temperature data from %s).' % (fname))
 
           if all_data == None:
             msg = 'No temperature data loaded for t = %s.' % str(t)
@@ -318,18 +328,23 @@ class bluefors_log_reader(Instrument):
           for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
             datestr = self.__time_to_datestr(tt)
             fname = os.path.join(self._address, datestr, 'CH{0} R {1}.log'.format(channel, datestr))
+            
             try:
               data = np.loadtxt(fname, dtype={'names': ('date', 'time', 'resistance'), 'formats': ('S9', 'S8', 'f')}, delimiter=',')
-              # convert the date & time strings to a datetime object
-              data = np.array([ [datetime.datetime(int('20'+d[0][7:9]), int(d[0][4:6]), int(d[0][1:3]), int(d[1][0:2]), int(d[1][3:5]), int(d[1][6:8]), tzinfo=tz.tzlocal()), d[2]] for d in data ])
+              logging.debug('Loaded R%d data for %s.' % (channel, str(tt)))
+            except Exception as e:
+              if datetime.datetime.now(tz.tzlocal()) > tt: # The exception is normal if tt is in the future.
+                logging.debug('Failed to load resistance data from %s).' % (fname))
+              continue
+
+            try:
+              data = np.array([ self.__line_to_datetime_val_pair(*d) for d in data ])
               if all_data == None:
                 all_data = data
               else:
                 all_data = np.concatenate((all_data, data), axis=0)
             except Exception as e:
-              if datetime.datetime.now(tz.tzlocal()) > tt: # The exception is normal if tt is in the future.
-                logging.debug('Failed to load resistance data for %s.' % str(tt))
-              pass
+              logging.exception('Failed to parse resistance data from %s).' % (fname))
 
           if all_data == None:
             msg = 'No resistance data loaded for t = %s.' % str(t)
