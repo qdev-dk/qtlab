@@ -317,7 +317,7 @@ class SR830(Instrument):
                 readvalue = float(self._visainstrument.ask('OUTP?%s' %output))
                 return readvalue
               except:
-                logging.exception('Attempt %d/%d to read output from SR830 failed.' (1+attempt, max_attempts))
+                logging.exception('Attempt %d/%d to read output from SR830 failed.' % (1+attempt, max_attempts))
                 qt.msleep(attempt**2 * 1.)
                 self.clear_output_buffer()
                 if attempt == max_attempts-1: raise # last attempt failed
