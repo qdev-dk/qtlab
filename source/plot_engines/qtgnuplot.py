@@ -365,7 +365,11 @@ class _QTGnuPlot():
     def cmd(self, cmdstr):
         '''Send command to gnuplot instance directly.'''
         if self._gnuplot is not None:
-            self._gnuplot.cmd(cmdstr)
+            output = self._gnuplot.cmd(cmdstr, retoutput=True)
+            if 'warning' in output.lower() or 'error' in output.lower():
+                logging.warn('Gnuplot output: ' + output)
+            else:
+                logging.debug('Gnuplot output: ' + output)
 
     def live(self):
         self._gnuplot.live()
