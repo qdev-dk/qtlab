@@ -303,6 +303,36 @@ class DataView():
         logging.debug("# of masked/unmasked rows = %d/%d" % (full_mask.astype(np.int).sum(), (~full_mask).astype(np.int).sum()))
         self.set_mask(full_mask)
 
+    def remove_masked_rows_permanently(self):
+        '''
+        Removes the currently masked rows permanently.
+
+        This is typically unnecessary, but may be useful
+        before adding (cached) virtual columns to
+        huge data sets where most rows are masked (because
+        the cached virtual columns are computed for
+        masked rows as well.)
+        '''
+        # Removing the real data rows themselves is easy.
+        self._data = self._data[~(self._mask),:]
+        
+        # but we have to also adjust the comment & settings line numbers
+        s = np.cumsum(self._mask.astype(np.int))
+        def n_masked_before_line(lineno): return s[max(0, min(len(s)-1, lineno-1))]
+        self._comments = [ (max(0,lineno-n_masked_before_line(lineno)), comment) for lineno,comment in self._comments ]
+        self._settings = [ (max(0,lineno-n_masked_before_line(lineno)), setting) for lineno,setting in self._settings ]
+
+        # as well as remove the masked rows from cached virtual columns.
+        # However, _virtual_dims is assumed to be immutable in copy() so
+        # we must copy it here!
+        old_dims = self._virtual_dims
+        self._virtual_dims = {}
+        for name, dim in old_dims.iteritems():
+          self._virtual_dims[name] = { 'fn': dim['fn'], 'cached_array': (None if dim['cached_array']==None else dim['cached_array'][~(self._mask)]) }
+
+        # finally remove the obsolete mask
+        self._mask = np.zeros(len(self._data), dtype=np.bool)
+
 
     def divide_into_sweeps(self, sweep_dimension, use_sweep_direction = None):
         '''
@@ -400,7 +430,8 @@ class DataView():
           deep_copy -- copy the returned data so that it is safe to modify it.
         '''
         if name in self._virtual_dims.keys():
-            d = self._virtual_dims[name]['fn'](self)
+            d = self._virtual_dims[name]['cached_array']
+            if d == None: d = self._virtual_dims[name]['fn'](self)
             if len(d) == len(self._mask): # The function may return masked or unmasked data...
               # The function returned unmasked data so apply the mask
               try:
@@ -437,17 +468,12 @@ class DataView():
 
         assert (fn != None) + (arr != None) + (comment_regex != None) + (from_set != None) == 1, 'You must specify exactly one of "fn", "arr", or "comment_regex".'
 
+        if arr != None:
+          assert len(arr) == len(self._mask), '"arr" must be a vector of the same length as the real data columns. If you want to do something fancier, specify your own fn.'
+
         if from_set != None:
             assert len(from_set) in [2, 3], 'from_set must be a tuple or triple.'
             assert self._settings != None, '.set files were not successfully parsed during dataview initialization.'
-
-        if arr != None:
-            assert len(arr) == len(self._mask), '"arr" must be a vector of the same length as the real data columns. If you want to do something fancier, specify your own fn.'
-
-            self.add_virtual_dimension(name,
-                                       (lambda dd,arr=arr: arr),
-                                       cache_fn_values=False)
-            return
 
         if comment_regex != None or from_set != None:
             # construct the column by parsing the comments or .sets
@@ -517,8 +543,7 @@ class DataView():
             self.add_virtual_dimension(name, arr=vals)
             return
 
-
-        if cache_fn_values:
+        if cache_fn_values and arr==None:
             old_mask = self.get_mask().copy() # backup the mask
             self.clear_mask()
             vals = fn(self)
@@ -527,7 +552,7 @@ class DataView():
             self.add_virtual_dimension(name, arr=vals, cache_fn_values=False)
             return
 
-        self._virtual_dims[name] = {'fn': fn}
+        self._virtual_dims[name] = {'fn': fn, 'cached_array': arr}
 
     def remove_virtual_dimension(self, name):
         if name in self._virtual_dims.keys():
