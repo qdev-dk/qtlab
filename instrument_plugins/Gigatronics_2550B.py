@@ -442,7 +442,10 @@ class Gigatronics_2550B(Instrument):
         f0 = self.do_get_frequency()
         
         logging.debug(__name__ + ' : set frequency to %f' % freq)
-        self._visainstrument.write('FREQ:CW %s' % freq)
+        rounded = '%.3f' % numpy.round(freq,decimals=3)
+        if numpy.abs(float(rounded) - freq) > numpy.finfo(numpy.float).tiny:
+          logging.warn('Rounding the requested frequency (%.15e) to %s (i.e. by %.6e).' % (freq, rounded, float(rounded) - freq))
+        self._visainstrument.write('FREQ:CW %s' % rounded)
 
         # the power takes a much longer time to stabilize for frequencies below 2 GHz
         if freq <= 2e9: time.sleep(.1) # sleep 500ms so that power stabilizes
