@@ -285,7 +285,10 @@ class Agilent_E8257D(Instrument):
             None
         '''
         logging.debug(__name__ + ' : set frequency to %f' % freq)
-        self._visainstrument.write('FREQ:CW %s' % freq)
+        rounded = '%.3f' % numpy.round(freq,decimals=3)
+        if numpy.abs(float(rounded) - freq) > numpy.finfo(numpy.float).tiny:
+          logging.warn('Rounding the requested frequency (%.15e Hz) to %s Hz (i.e. by %.6e Hz).' % (freq, rounded, float(rounded) - freq))
+        self._visainstrument.write('FREQ:CW %s' % rounded)
     
     
     def do_get_frequency_center(self):
@@ -553,7 +556,7 @@ class Agilent_E8257D(Instrument):
         
     def do_get_mod_pulse(self):
         stat = self._visainstrument.ask(':PULM:STAT?')
-        return stat.lower().strip() in ['1', 'on']
+        return 'on' if (stat.lower().strip() in ['1', 'on']) else 'off'
     def do_set_mod_pulse(self, status):
         self._visainstrument.write(':PULM:STAT %s' % (status.upper()))
         
