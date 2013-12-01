@@ -446,7 +446,7 @@ class DataView():
         if deep_copy: d = d.copy()
         return d
 
-    def add_virtual_dimension(self, name, fn=None, arr=None, comment_regex=None, from_set=None, cache_fn_values=True):
+    def add_virtual_dimension(self, name, fn=None, arr=None, comment_regex=None, from_set=None, cache_fn_values=True, return_result=False):
         '''
         Makes a computed vector accessible as self[name].
         The computed vector depends on whether fn, arr or comment_regex is specified.
@@ -463,6 +463,7 @@ class DataView():
                            a tuple ("instrument_name", "parameter_name", dtype=np.float).
 
           cache_fn_values -- evaluate fn(self) immediately for the entire (unmasked) array and cache the result
+          return_result   -- return the result directly as an (nd)array instead of adding it as a virtual dimension
         '''
         logging.debug('adding virtual dimension "%s"' % name)
 
@@ -552,7 +553,10 @@ class DataView():
             self.add_virtual_dimension(name, arr=vals, cache_fn_values=False)
             return
 
-        self._virtual_dims[name] = {'fn': fn, 'cached_array': arr}
+        if return_result:
+          return arr
+        else:
+          self._virtual_dims[name] = {'fn': fn, 'cached_array': arr}
 
     def remove_virtual_dimension(self, name):
         if name in self._virtual_dims.keys():
