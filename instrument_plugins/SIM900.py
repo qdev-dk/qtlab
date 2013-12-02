@@ -397,7 +397,7 @@ class SIM900(Instrument):
         else:
           bytes = r[5:5+nbytes].replace("\n","").replace("\r","")
           logging.debug(__name__ + ' : parsed output on response: %s' % bytes)
-          return bool(bytes)
+          return bytes.strip().lower() in ['1', 'on']
       except Exception as e:
         logging.warn('Attempt #%d to get port %d "on" status from SIM failed: %s' % (1+attempt, port, str(e)))
         time.sleep( .5 )
