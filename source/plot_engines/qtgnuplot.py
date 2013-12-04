@@ -627,11 +627,11 @@ class Plot2D(plot.Plot2DBase, _QTGnuPlot):
             else:
                 every = '::%d:%d' % (startpoint, startblock)
 
-            if 'top' in datadict:
+            if 'top' in datadict and bool(datadict['top']):
                 axes = 'x2'
             else:
                 axes = 'x1'
-            if 'right' in datadict:
+            if 'right' in datadict and bool(datadict['right']):
                 axes += 'y2'
             else:
                 axes += 'y1'
