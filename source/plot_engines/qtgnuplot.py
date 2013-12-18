@@ -279,7 +279,7 @@ class _QTGnuPlot():
         term = 'postscript color enhanced %s' % (fontstring)
         self.save_as_type(term, 'ps', filepath=filepath, **kwargs)
 
-    def save_eps(self, filepath=None, font='Helvetica', fontsize=14, size=None, **kwargs):
+    def save_eps(self, filepath=None, font='Helvetica', fontsize=14, keyfontsize=None, size=None, **kwargs):
         '''
         Save encapsulated-postscript version of the plot.
 
@@ -287,12 +287,14 @@ class _QTGnuPlot():
             - filepath: file path + name
             - font: font name
             - fontsize: font size
+            - keyfontsize: font size used in the key/legend, if different from fontsize
             - size: string specifying the image size (e.g. '20cm,15cm')
         '''
 
         sizestring = ' size '+str(size) if size!=None else ''
         fontstring = '"%s, %s"' % (font, fontsize)
         term = 'postscript eps %s color enhanced %s' % (sizestring, fontstring)
+        if keyfontsize != None: self._gnuplot.cmd('set key font "%s, %s"' % (font, keyfontsize))
         self.save_as_type(term, 'eps', filepath=filepath, **kwargs)
 
     def save_png(self, filepath=None, font='', transparent=False, size=None, **kwargs):
