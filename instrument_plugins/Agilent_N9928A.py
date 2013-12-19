@@ -220,12 +220,16 @@ class Agilent_N9928A(Instrument):
           # measure the time it took to complete the loop
           t0 = t1
           t1 = time.time()
-
-          # sleep until the sweep is almost done
-          if i>0:
-            qt.msleep((t1 - t0) * 0.9)
           
-          self.single(block_until_done = True)
+          self.single(block_until_done = False)
+
+          if i>0:
+            # sleep until the sweep is almost done
+            sleeping = np.max(( 0., (t1 - t0) - 10. ))
+            logging.debug('Sleeping %.2e seconds before asking for OPC.' % sleeping)
+            qt.msleep(sleeping)
+
+          self.block_until_operation_complete()
 
           if i==0 and autoscale_after_first_sweep:
             for j in range(4): self.autoscale(1+j)
@@ -261,6 +265,7 @@ class Agilent_N9928A(Instrument):
         '''
         logging.debug(__name__ + 'Do a single sweep and %swait for the command to be completed.' % ('' if block_until_done else 'DO NOT '))
         self._visainstrument.write('INIT:IMM')
+        qt.msleep(5.)
         if block_until_done: self.block_until_operation_complete()
 
     def block_until_operation_complete(self):
@@ -783,6 +788,17 @@ class Agilent_N9928A(Instrument):
         '''
         Set the current measurement.  Options depend on which mode (CAT, NA, VVM) is currently selected.
         If param/chan is 2,3,4 then an appropriate multitrace configuration must be created first.
+        For NA Mode:
+
+        Reverse measurements are available ONLY with full S-parameter option.
+        S11 - Forward reflection measurement
+        S21 - Forward transmission measurement
+        S12 - Reverse transmission
+        S22 - Reverse reflection
+        A - A receiver measurement
+        B - B receiver measurement
+        R1 - Port 1 reference receiver measurement
+        R2 - Port 2 reference receiver measurement
 
         Input:
             len (int) : 
