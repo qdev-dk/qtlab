@@ -28,7 +28,7 @@ _cfg['qtlibs'] = True
 
 import types
 from instrument import Instrument
-from lib.misc import exact_time, get_ipython
+from lib.misc import exact_time, get_ipython_backward_compatible
 from lib import temp
 from time import sleep
 
@@ -79,7 +79,7 @@ try:
     import qtflow
     # Note: This does not seem to work for 'KeyboardInterrupt',
     # likely it is already caught by ipython itself.
-    get_ipython().set_custom_exc((Exception, ), qtflow.exception_handler)
+    get_ipython_backward_compatible().set_custom_exc((Exception, ), qtflow.exception_handler)
 except Exception, e:
     print 'Error: %s' % str(e)
 
