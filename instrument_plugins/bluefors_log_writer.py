@@ -21,7 +21,7 @@ from dateutil import tz
 import os
 import logging
 
-def write(quantity, channel, value, address='K:'):
+def write(quantity, channel, value, address='D:/bluefors_logs'):
 
   if quantity not in ['kelvin', 'resistance']:
     logging.warn('Logging "%s" not implemented!' % quantity)
