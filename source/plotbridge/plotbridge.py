@@ -44,10 +44,10 @@ class Plot():
 
   Template based means that the the output is a text file that can
   be executed using an external plot engine (e.g. gnuplot or Matlab).
-  For example, the output for a plot of two traces called "iv" (using the "gnuplot_1d"
+  For example, the output for a plot of two traces called "iv" (using the "gnuplot_2d"
   template) consists of a directory 'iv' that contains:
-    * gnuplot_1d.preprocess   (an optional script that preprocesses the trace data and/or plot script)
-    * gnuplot_1d.interactive  (an optional script that plots iv.gnuplot in an interactive mode,
+    * gnuplot_2d.preprocess   (an optional script that preprocesses the trace data and/or plot script)
+    * gnuplot_2d.interactive  (an optional script that plots iv.gnuplot in an interactive mode,
                                if different from running iv.gnuplot directly.)
     * iv.gnuplot              (the main plot script passed to the plot engine [gnuplot]) 
     * trace_UUID1.npy         (binary data for trace 1)
@@ -95,12 +95,12 @@ class Plot():
     (as opposed to Numpy arrays).
   '''
 
-  def __init__(self, name=None, template='gnuplot_1d', output_dir=None, overwrite=False):
+  def __init__(self, name=None, template='gnuplot_2d', output_dir=None, overwrite=False):
     '''
     Create a plot object.
 
     name (string)       --- default will be 'plot<n>'
-    template (string)   --- the template (e.g. 'gnuplot_1d') for generating the output,
+    template (string)   --- the template (e.g. 'gnuplot_2d') for generating the output,
                             see the default_templates subdir for available built-in alternatives
                             or provide a full path to your own custom template.
     output_dir (string) --- where output subdir should be created,

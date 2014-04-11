@@ -90,7 +90,7 @@ class Plot(SharedGObject):
             name (string)           --- default 'plot<n>'
             mintime (int, seconds)  --- min time between autoupdates, default 1
             autoupdate (bool)       --- update the plot when data points added, default True
-            template (string)       --- default 'gnuplot_1d' ('gnuplot_2d') for 1D (2D) plots
+            template (string)       --- default 'gnuplot_2d' ('gnuplot_3d') for 2D (3D) plots
             output_dir (string)     --- directory for storing the plot. default '.'
             coorddim (int or        --- index (indices) of the data column(s)
                       [int,int])        used as x (x,y) coordinate(s) for a 1D (2D) plot,
@@ -101,7 +101,7 @@ class Plot(SharedGObject):
 
         mintime = kwargs.pop('mintime', 1)
         autoupdate = kwargs.pop('autoupdate', True)
-        template = kwargs.pop('template', 'gnuplot_1d')
+        template = kwargs.pop('template', 'gnuplot_2d')
         output_dir = kwargs.pop('output_dir', '.')
         coorddim = kwargs.pop('coorddim', [0])
         valdim = kwargs.pop('valdim', [1])
