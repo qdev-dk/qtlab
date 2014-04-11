@@ -281,6 +281,16 @@ class Plot(SharedGObject):
     def set_zrange(self, minval=None, maxval=None, update=True): self._pltbr.set_zrange(*([minval,maxval] if minval != None else []))
     def set_grid(self, val=None, update=True): self._pltbr.set_grid(*([val] if val != None else []))
 
+    def save_png(self, *args, **kwargs):
+      ''' Deprecated. Use plotbridge.Plot.set_export_png(True) or plotbridge.Plot.set_export_eps(True) followed by run(). '''
+      self._pltbr.set_export_png(True)
+      logging.warn('This function is deprecated. Use plotbridge.Plot.set_export_png(True) or plotbridge.Plot.set_export_eps(True) followed by run(). Arguments ignored: %s, %s', args, kwargs)
+
+    def save_eps(self, *args, **kwargs):
+      ''' Deprecated. Use plotbridge.Plot.set_export_png(True) or plotbridge.Plot.set_export_eps(True) followed by run(). '''
+      self._pltbr.set_export_eps(True)
+      logging.warn('This function is deprecated. Use plotbridge.Plot.set_export_png(True) or plotbridge.Plot.set_export_eps(True) followed by run(). Arguments ignored: %s, %s', args, kwargs)
+
 
 class Plot2D(Plot):
     '''
