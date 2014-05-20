@@ -31,6 +31,7 @@ import uuid
 from collections import OrderedDict
 import itertools
 import subprocess
+import re
 
 
 
@@ -532,6 +533,7 @@ class Plot():
   ##############
 
   def add_trace(self, x, y=None, yerr=None,
+        slowcoordinate=None,
         points=True, lines=False,
         x_plot_units=1, y_plot_units=1, # divide data by these factors before plotting
         skip=1, # plot only every skip'th point
@@ -543,12 +545,35 @@ class Plot():
         right=None,
         update=False):
     '''
-    Add a 1D trace to the plot.
+    Add a 1D trace to the plot (or rather a 2D parametric curve).
 
+    x,y    --- the x and y coordinates as two separate vectors of length N or as a Nx2 or 2xN matrix
+    yerr   --- error bars for the ycoordinate
+    slowcoordinate --- used as a second coordinate in some templates (e.g. 2D color maps)
+    points --- draw points
+    lines  --- connect points with lines
+    x_plot_units  --- divide x data by this factor before plotting
+    y_plot_units  --- divide y data by this factor before plotting
+    skip   --- plot only every skip'th point
+    crop   --- leave out crop points at each end
+    title  --- label for this trace
+    point/linetype --- integer indicating the point/line style (see gnuplot pointtypes)
+    point/linesize --- size
+    color  --- point/line color
+    right  --- use the second y-axis (left == first y-axis)
     update --- whether plot script should be regenerated
     '''
     assert crop == None or isinstance(crop, int), 'crop must be an int'
     assert skip == None or isinstance(skip, int), 'skip must be an int'
+
+    if slowcoordinate == None and title != None and len(title) > 0:
+      # Attempt parsing the slow coordinate value for title, if none was specified.
+      m = re.search(r'([e\d\.\+\-]+)', title)
+      if m and len(m.groups()) == 1: # don't try to guess if multiple matches
+        try:
+          slowcoordinate = float(m.group(1))
+        except:
+          pass
 
     # Generate a random unique id for the trace
     trace_id = uuid.uuid4().hex
@@ -556,6 +581,7 @@ class Plot():
     self._traces[trace_id] = {
       'recordformat':[], # this is updated by update_trace() (called below)
       'yerrorcol':None, # this is updated by update_trace() (called below)
+      'slowcoordinate':slowcoordinate,
       'points':points,
       'lines':lines,
       'x_plot_units':x_plot_units,
