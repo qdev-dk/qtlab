@@ -3,9 +3,11 @@ This template uses Jinja2. See http://jinja.pocoo.org/docs/templates/ for syntax
 
 See qtlab/source/plot_engines/templateplot.py for information about available template variables.
 The variables have been chosen with gnuplot in mind, but it should be straightforward to map them
-to corresponding values used in other tools (Matlab, matplotlib, Mathematica, Origin, etc.)
+to corresponding values used in other tools (Matlab, matplotlib, Mathematica, Origin, etc.).
+If necessary, you can use the .preprocess python script to preprocess the trace data files into whatever
+format is most easily read by your plotting tool.
 
-This is a template for one dimensional curves using gnuplot.
+This is a template for two dimensional parametric curves using gnuplot.
 #}
 #!/usr/bin/gnuplot
 #
@@ -63,6 +65,9 @@ set output "output.png"
 ###
 # Some common formatting
 ###
+
+# Tick formatting
+#set format x "%.2g"
 
 ### Ticks ###
 
