@@ -1,0 +1,78 @@
+#!/usr/bin/python
+
+#
+# Combine all of the trace data files into a single matrix
+# so that it's easy to plot it in gnuplot "with image".
+#
+
+import os
+import sys
+import time
+import logging
+import numpy as np
+import struct
+import shutil
+import uuid
+
+# Collect all traces
+all_traces = []
+for f in os.listdir('.'):
+  if f.startswith('trace_') and f.endswith('.npy'):
+    try:
+      # This assumes float data type and 2 column format!!!
+      all_traces.append({ 'trace_data': np.fromfile(f).reshape((-1,2)), 'mtime': os.path.getmtime(f) })
+    except:
+      logging.exception('Failed to load %s', f)
+      raise
+
+    
+# Sort them by modification time
+all_traces = sorted(all_traces, key=lambda t: t['mtime'])
+all_traces = [ t['trace_data'] for t in all_traces ]
+
+# Figure out the length of the longest trace
+longest_trace = np.argmax([ len(t) for t in all_traces ])
+ncols = len(all_traces[longest_trace])
+
+#print all_traces[longest_trace]
+
+# Use the longest trace as reference for aligning the columns in different traces (based on x value)
+def x_to_col_number(x):
+  return [ np.argmin(np.abs( all_traces[longest_trace][:,0] - xx )) for xx in x ]
+
+# Allocate the "image" matrix for storing all traces.
+img = np.zeros((len(all_traces), ncols), dtype=np.float) + np.nan
+logging.warn('Output image size: %s', img.shape)
+for i,t in enumerate(all_traces):
+  img[i, x_to_col_number(t[:,0])] = t[:,1]
+
+
+#
+# Output into a format easily read by gnuplot.
+#
+
+# This would also work, but does not include axis values (indices only) and is slower for large files
+#np.savetxt('image_matrix.txt', img)
+
+# The format for a gnuplot "binary matrix" is specified in:
+# http://gnuplot.sourceforge.net/docs_4.2/node330.html
+#
+# All numbers (inluding the number of points) are specified as single-precision floats.
+
+xaxis_values = np.arange(len(all_traces))
+
+output_fname = 'image_matrix.gnuplot_binary_matrix'
+tmp_ext = uuid.uuid4().hex
+with open(output_fname + tmp_ext, 'wb') as fout:
+
+  # first line consists of Nypts, y0, y1, ...
+  fmt = '<f%uf' % img.shape[1]
+  fout.write(struct.pack(fmt, img.shape[1], *(all_traces[longest_trace][:,0]) ))
+
+  # following lines consist of xi, zi,0, zi,1, ...
+  fmt = '<f%uf' % img.shape[1]
+  for j in range(len(all_traces)):
+    fout.write(struct.pack(fmt, xaxis_values[j], *(img[j,:]) ))
+
+# Overwrite the old file atomically
+shutil.move(output_fname + tmp_ext, output_fname)
