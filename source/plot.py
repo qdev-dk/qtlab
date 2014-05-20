@@ -92,6 +92,7 @@ class Plot(SharedGObject):
             autoupdate (bool)       --- update the plot when data points added, default True
             template (string)       --- default 'gnuplot_2d' ('gnuplot_3d') for 2D (3D) plots
             output_dir (string)     --- directory for storing the plot. default '.'
+            run (bool)              --- whether the plot script should be immediately ran (opened)
             coorddim (int or        --- index (indices) of the data column(s)
                       [int,int])        used as x (x,y) coordinate(s) for a 1D (2D) plot,
                                         default 0.
@@ -102,6 +103,7 @@ class Plot(SharedGObject):
         mintime = kwargs.pop('mintime', 1)
         autoupdate = kwargs.pop('autoupdate', True)
         template = kwargs.pop('template', 'gnuplot_2d')
+        run = kwargs.pop('run', True)
         output_dir = kwargs.pop('output_dir', '.')
         coorddim = kwargs.pop('coorddim', [0])
         valdim = kwargs.pop('valdim', [1])
@@ -132,7 +134,8 @@ class Plot(SharedGObject):
 
         Plot._plot_list.add(self._name, self)
 
-        self._pltbr.run(interactive=True)
+        if run:
+          self._pltbr.run(interactive=True)
 
     def get_plot(self):
       ''' Returns the underlying plotbridge object. Useful for customizing plot options. '''
@@ -608,7 +611,7 @@ def plot(*args, **kwargs):
     ret = kwargs.pop('ret', True)
     graph = Plot._plot_list[plotname]
     if graph is None:
-        graph = Plot2D(name=plotname, output_dir=kwargs.pop('output_dir', '.'))
+        graph = Plot2D(name=plotname, **kwargs)
 
     #set_global_plot_options(graph, kwargs)
 
