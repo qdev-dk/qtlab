@@ -260,6 +260,7 @@ class Plot():
     # Copy helper files associated with template (i.e. all other files that start with the template name.)
     for helper_file in os.listdir(template_dir):
       if (helper_file.endswith('~')
+        or helper_file.startswith('.')
         or helper_file.startswith('#')
         or helper_file.endswith('.template')
         or helper_file.endswith('.cfg')): continue
