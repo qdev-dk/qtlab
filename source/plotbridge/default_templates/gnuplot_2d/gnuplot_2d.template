@@ -57,6 +57,7 @@ set output "output.png"
 {% if global_opts.cblog %}set logscale cb
 {% endif %}
 {% if global_opts.grid %}set grid
+{% else %}unset grid
 {% endif %}
 
 {% if global_opts.title %}set title "{{ global_opts.title }}"
@@ -94,7 +95,8 @@ set output "output.png"
 #                                   tc rgb "#777777"
 
 # legend position
-set key left top
+#set key left top
+set key right bottom
 #set key above title "Legend" box 3
 
 

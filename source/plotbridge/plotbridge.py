@@ -406,9 +406,9 @@ class Plot():
     self._global_opts['basefontsize'] = int(val)
 
   def set_title(self, val=None):
-    ''' Set the title of the plot window. Defaults to plot name.'''
+    ''' Set the title of the plot window. '''
     assert val == None or isinstance(val, basestring), 'title must be a string'
-    self._global_opts['title'] = val if val != None else self.get_name().strip()
+    self._global_opts['title'] = val
 
   def set_legend(self, val=True):
     ''' Enable/disable legend.'''
