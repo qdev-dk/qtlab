@@ -89,10 +89,24 @@ set key left top
 
 
 {% if traces %}
-plot \
+set pm3d map
+#set pm3d interpolate 2,2
+splot \
    "image_matrix.gnuplot_binary_matrix" \
-   binary matrix with image \
+   binary matrix \
    title ""
+
+# This works well if you have evenly space "slow axis" data
+#plot \
+#   "image_matrix.gnuplot_binary_matrix" \
+#   binary matrix with image \
+#   title ""
+
+## List of slow coordinate values (if any)
+{% for trace in traces %}
+{% if trace.slowcoordinate %}# {{trace.npyfile}} slowcoord = {{trace.slowcoordinate}}
+{% endif %}
+{% endfor %}
 
 {% endif %}
 

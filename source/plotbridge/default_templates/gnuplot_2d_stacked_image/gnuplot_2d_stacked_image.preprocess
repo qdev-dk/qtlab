@@ -13,6 +13,7 @@ import numpy as np
 import struct
 import shutil
 import uuid
+import re
 
 # Collect all traces
 all_traces = []
@@ -20,31 +21,58 @@ for f in os.listdir('.'):
   if f.startswith('trace_') and f.endswith('.npy'):
     try:
       # This assumes float data type and 2 column format!!!
-      all_traces.append({ 'trace_data': np.fromfile(f).reshape((-1,2)), 'mtime': os.path.getmtime(f) })
+      all_traces.append({ 'fname': f,
+                          'trace_data': np.fromfile(f).reshape((-1,2)),
+                          'mtime': os.path.getmtime(f) })
     except:
       logging.exception('Failed to load %s', f)
       raise
 
-    
-# Sort them by modification time
-all_traces = sorted(all_traces, key=lambda t: t['mtime'])
-all_traces = [ t['trace_data'] for t in all_traces ]
+# Attempt to read slow-axis values from the plot script
+plot_script = None
+for f in os.listdir('.'):
+  if f.endswith('.gnuplot'):
+    plot_script = f
+    break
+if plot_script != None:
+  fname_to_index = dict( (t['fname'], i) for i,t in enumerate(all_traces) )
+  with open(plot_script, 'r') as f:
+    line = f.readline()
+    while line:
+      m = re.search(r'^#\s*(trace_.*\.npy)\s+slowcoord\s*=\s*(.+)$',  line)
+      if m and len(m.groups()) == 2:
+        try: all_traces[fname_to_index[m.group(1)]]['slowcoord'] = float(m.group(2))
+        except: logging.exception('could not parse slow coordinate')
+      line = f.readline()
+
+# Use parsed values if all traces have one
+ntraces_with_slow_coord = np.sum([ 'slowcoord' in t.keys() for t in all_traces ])
+if ntraces_with_slow_coord != len(all_traces):
+  # otherwise fall back to ordering my modification time (and using trace index as slow coordinate)
+  all_traces = sorted(all_traces, key=lambda t: t['mtime'])
+  for i in range(len(all_traces)): all_traces[i]['slowcoord'] = i
+  if ntraces_with_slow_coord > 0:
+    logging.warn('only %d of %d traces have a slow coordinate specified. Falling back to trace number.',
+                 ntraces_with_slow_coord, len(all_traces) )
+
+# Sort the traces by slow value
+all_traces = sorted(all_traces, key=lambda t: t['slowcoord'])
 
 # Figure out the length of the longest trace
-longest_trace = np.argmax([ len(t) for t in all_traces ])
-ncols = len(all_traces[longest_trace])
+longest_trace = np.argmax([ len(t['trace_data']) for t in all_traces ])
+ncols = len(all_traces[longest_trace]['trace_data'])
 
 #print all_traces[longest_trace]
 
 # Use the longest trace as reference for aligning the columns in different traces (based on x value)
 def x_to_col_number(x):
-  return [ np.argmin(np.abs( all_traces[longest_trace][:,0] - xx )) for xx in x ]
+  return [ np.argmin(np.abs( all_traces[longest_trace]['trace_data'][:,0] - xx )) for xx in x ]
 
 # Allocate the "image" matrix for storing all traces.
 img = np.zeros((len(all_traces), ncols), dtype=np.float) + np.nan
-logging.warn('Output image size: %s', img.shape)
+logging.info('Output image size: %s', img.shape)
 for i,t in enumerate(all_traces):
-  img[i, x_to_col_number(t[:,0])] = t[:,1]
+  img[i, x_to_col_number(t['trace_data'][:,0])] = t['trace_data'][:,1]
 
 
 #
@@ -59,20 +87,18 @@ for i,t in enumerate(all_traces):
 #
 # All numbers (inluding the number of points) are specified as single-precision floats.
 
-xaxis_values = np.arange(len(all_traces))
-
 output_fname = 'image_matrix.gnuplot_binary_matrix'
 tmp_ext = uuid.uuid4().hex
 with open(output_fname + tmp_ext, 'wb') as fout:
 
   # first line consists of Nypts, y0, y1, ...
   fmt = '<f%uf' % img.shape[1]
-  fout.write(struct.pack(fmt, img.shape[1], *(all_traces[longest_trace][:,0]) ))
+  fout.write(struct.pack(fmt, img.shape[1], *(all_traces[longest_trace]['trace_data'][:,0]) ))
 
   # following lines consist of xi, zi,0, zi,1, ...
   fmt = '<f%uf' % img.shape[1]
   for j in range(len(all_traces)):
-    fout.write(struct.pack(fmt, xaxis_values[j], *(img[j,:]) ))
+    fout.write(struct.pack(fmt, all_traces[j]['slowcoord'], *(img[j,:]) ))
 
 # Overwrite the old file atomically
 shutil.move(output_fname + tmp_ext, output_fname)
