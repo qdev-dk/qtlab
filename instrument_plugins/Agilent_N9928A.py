@@ -24,6 +24,7 @@ import numpy as np
 import struct
 import time
 import qt
+from collections import OrderedDict
 
 class Agilent_N9928A(Instrument):
     '''
@@ -68,7 +69,7 @@ class Agilent_N9928A(Instrument):
             flags=Instrument.FLAG_GETSET, minval=30E3, maxval=26.5E9, units = 'Hz', type=types.FloatType)
 
         self.add_parameter('frequency_span',
-            flags=Instrument.FLAG_GETSET, minval=30E3, maxval=26.5E9, units = 'Hz', type=types.FloatType)
+            flags=Instrument.FLAG_GETSET, minval=1, maxval=26.5E9, units = 'Hz', type=types.FloatType)
 
         self.add_parameter('IF_bandwidth',
             flags=Instrument.FLAG_GETSET, minval=10, maxval=30E3, units = 'Hz', type=types.FloatType)
@@ -617,7 +618,27 @@ class Agilent_N9928A(Instrument):
         logging.debug(__name__ + 'Setting the stop frequency to %f. Hz' % freq)
         self._visainstrument.write('FREQ:SPAN %f' % freq)
 
-		
+    def get_number_of_traces(self):
+        '''
+        Return the number of traces currently enabled.
+        '''
+        return {'D1': 1, 'D2': 2, 'D12H': 2, 'D1123': 3, 'D12_34': 4}[self.get_multi_trace()]
+
+    def get_s_parameters_on_screen(self, sparams=None):
+        '''
+        Return all traces on screen as {'S11': np.array(...), 'S21': ...}
+        If sparams == None, all traces on screen will be returned. Otherwise, only the specified ones (e.g. 'S11').
+        '''
+        all_traces = OrderedDict()
+        for i in range(1,1 + self.get_number_of_traces()):
+          par = self.get('ch%d_current_measurement' % i)
+          if sparams == None or par in sparams: all_traces[par] = self.get_data(i)
+
+        if sparams != None and len(all_traces) != len(sparams):
+          logging.warn('Fewer traces returned (%s) than requested (%s).', all_traces.keys(), sparams)
+
+        return all_traces
+
     def get_all(self):
         '''
         Reads all implemented parameters from the instrument,
@@ -645,23 +666,9 @@ class Agilent_N9928A(Instrument):
         self.get_source_power_mode()
 
         # Get the measurement and smoothing parameters for the windows on the screen.
-        window_config  = self.get_multi_trace()
-        if window_config == 'D1':
-          for i in range(1,2):
-            self.get('ch%d_smoothing_mode' % i)
-            self.get('ch%d_current_measurement' % i)       
-        elif window_config in ['D2', 'D12H']:
-          for i in range(1,3):
-            self.get('ch%d_smoothing_mode' % i)
-            self.get('ch%d_current_measurement' % i)
-        elif window_config == 'D1123':
-          for i in range(1,4):
-            self.get('ch%d_smoothing_mode' % i)
-            self.get('ch%d_current_measurement' % i)
-        elif window_config == 'D12_34':
-          for i in range(1,5):
-            self.get('ch%d_smoothing_mode' % i)
-            self.get('ch%d_current_measurement' % i)
+        for i in range(1,1 + self.get_number_of_traces()):
+          self.get('ch%d_smoothing_mode' % i)
+          self.get('ch%d_current_measurement' % i)
                    
     def do_get_operating_mode(self):
         '''
