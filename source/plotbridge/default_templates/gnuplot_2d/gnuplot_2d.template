@@ -60,6 +60,17 @@ set output "output.png"
 {% else %}unset grid
 {% endif %}
 
+{% if global_opts.xrange and global_opts.xrange[0] and global_opts.xrange[1] %}set xrange [{{ global_opts.xrange[0] }}:{{ global_opts.xrange[1] }}]
+{% endif %}
+{% if global_opts.x2range and global_opts.x2range[0] and global_opts.x2range[1] %}set x2range [{{ global_opts.x2range[0] }}:{{ global_opts.x2range[1] }}]
+{% endif %}
+{% if global_opts.yrange and global_opts.yrange[0] and global_opts.yrange[1] %}set yrange [{{ global_opts.yrange[0] }}:{{ global_opts.yrange[1] }}]
+{% endif %}
+{% if global_opts.y2range and global_opts.y2range[0] and global_opts.y2range[1] %}set y2range [{{ global_opts.y2range[0] }}:{{ global_opts.y2range[1] }}]
+{% endif %}
+{% if global_opts.zrange and global_opts.zrange[0] and global_opts.zrange[1] %}set zrange [{{ global_opts.zrange[0] }}:{{ global_opts.zrange[1] }}]
+{% endif %}
+
 {% if global_opts.title %}set title "{{ global_opts.title }}"
 {% endif %}
 
