@@ -1,5 +1,5 @@
 # Lakeshore 370, Lakeshore 370 temperature controller driver
-# Joonas Govenius <joonas.govenius@aalto.fi>, 2013
+# Joonas Govenius <joonas.govenius@aalto.fi>, 2014
 # Based on Lakeshore 340 driver by Reinier Heeres <reinier@heeres.eu>, 2010.
 #
 # This program is free software; you can redistribute it and/or modify
@@ -25,6 +25,12 @@ import math
 import time
 import numpy as np
 import qt
+import os
+import random
+import hashlib
+from lib.config import get_config
+config = get_config()
+
 
 class Lakeshore_370(Instrument):
 
@@ -261,9 +267,30 @@ class Lakeshore_370(Instrument):
             type=types.FloatType,
             units='Ohm')
 
+        self.add_parameter('autoupdate_interval',
+            flags=Instrument.FLAG_GETSET,
+            type=types.IntType,
+            units='s')
+
+        self.add_parameter('still_heater',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET,
+            type=types.FloatType,
+            minval=0, maxval=100,
+            units='%')
+
+        self.add_parameter('autoupdate_while_measuring',
+            flags=Instrument.FLAG_GETSET|Instrument.FLAG_PERSIST,
+            type=types.BooleanType)
+        if self.get_autoupdate_while_measuring() == None: self.update_value('autoupdate_while_measuring', False)
+
         self.add_function('local')
         self.add_function('remote')
 
+
+        ### Auto-updating (useful mostly if you are also logging temperatures) ####
+        self._autoupdater_handle = "lakeshore_autoupdater_%s" % (hashlib.md5(address).hexdigest()[:8])
+        self.set_autoupdate_interval(kwargs.get('autoupdate_interval', 60. if self._logger != None else -1)) # seconds
+        
         if reset:
             self.reset()
         else:
@@ -288,6 +315,7 @@ class Lakeshore_370(Instrument):
         self.get_temperature_control_use_filtered_reading()
         self.get_temperature_control_heater_max_range()
         self.get_temperature_control_heater_load_resistance()
+        self.get_still_heater()
         
         self.get_heater_range()
         self.get_heater_status()
@@ -312,13 +340,81 @@ class Lakeshore_370(Instrument):
           
 
     def __ask(self, msg):
-        m = self._visa.ask("%s" % msg).replace('\r','')
-        qt.msleep(.01)
+        attempt = 0
+        while True:
+          try:
+            m = self._visa.ask("%s" % msg).replace('\r','')
+            qt.msleep(.01)
+            break
+          except:
+            if attempt >= 0: logging.warn('Attempt #%d to communicate with LakeShore failed.', 1+attempt)
+            if attempt < 4:
+              qt.msleep((1+attempt)**2 * (0.1 + random.random()))
+            else:
+              raise
         return m
 
     def __write(self, msg):
-        self._visa.write("%s" % msg)
-        qt.msleep(.5)
+        attempt = 0
+        while True:
+          try:
+            self._visa.write("%s" % msg)
+            qt.msleep(.5)
+            break
+          except:
+            if attempt > 0: logging.warn('Attempt #%d to communicate with LakeShore failed.', 1+attempt)
+            if attempt < 4:
+              qt.msleep((1+attempt)**2 * (0.1 + random.random()))
+            else:
+              raise
+
+    def __query_auto_updated_quantities(self):
+
+      if self not in qt.instruments.get_instruments().values():
+        logging.debug('Old timer for Lakeshore auto-update. Terminating thread...')
+        return False # stop the timer
+      
+      if not (self._autoupdate_interval != None and self._autoupdate_interval > 0):
+        logging.debug('Auto-update interval not > 0. Terminating thread...')
+        return False # stop the timer
+
+      if (not self.get_autoupdate_while_measuring()) and qt.flow.is_measuring():
+        return True # don't interfere with the measurement
+
+      try:
+        ch = self.do_get_scanner_channel()
+        logging.debug('Auto-updating temperature reading (channel %s)...' % ch)
+        getattr(self, 'get_kelvin%s' % ch)()
+        getattr(self, 'get_resistance%s' % ch)()
+
+      except Exception as e:
+        logging.debug('Failed to auto-update temperature/resistance (attempt %d): %s' % (failed_attempts, str(e)))
+
+      return True # keep calling back
+          
+    def do_get_autoupdate_interval(self):
+        return self._autoupdate_interval
+
+    def do_set_autoupdate_interval(self, val):
+        self._autoupdate_interval = val
+
+        from qtflow import get_flowcontrol
+        
+        get_flowcontrol().remove_callback(self._autoupdater_handle, warn_if_nonexistent=False)
+        
+        if self._autoupdate_interval != None and self._autoupdate_interval > 0:
+
+          if self._logger == None:
+            logging.warn('You have enabled auto-updating, but not log file writing, which is a bit odd.')
+
+          get_flowcontrol().register_callback(int(np.ceil(1e3 * self._autoupdate_interval)),
+                                              self.__query_auto_updated_quantities,
+                                              handle=self._autoupdater_handle)
+
+    def do_get_autoupdate_while_measuring(self):
+        return self.get('autoupdate_while_measuring', query=False)
+    def do_set_autoupdate_while_measuring(self, v):
+        self.update_value('autoupdate_while_measuring', bool(v))
 
     def do_get_identification(self):
         return self.__ask('*IDN?')
@@ -475,7 +571,14 @@ class Lakeshore_370(Instrument):
         cmd = 'PID %.5g,%.5g,%.5g' % (val[0], val[1], val[2])
         self.__write(cmd)
         self.get_temperature_control_pid()
-       
+
+    def do_get_still_heater(self):
+        ans = self.__ask('STILL?')
+        return float(ans)
+
+    def do_set_still_heater(self, val):
+        self.__write('STILL %.2F' % (val))
+
     def do_get_temperature_control_setpoint(self):
         ans = self.__ask('SETP?')
         return float(ans)

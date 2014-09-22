@@ -1,5 +1,5 @@
 # bluefors_log_writer.py class, for writing temperature log files in the Bluefors format
-# Joonas Govenius <joonas.goveius@aalto.fi>, 2013
+# Joonas Govenius <joonas.govenius@aalto.fi>, 2013
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,7 +23,17 @@ import logging
 
 def write(quantity, channel, value, address='D:/bluefors_logs'):
 
-  if quantity not in ['kelvin', 'resistance']:
+  if quantity not in ['kelvin',
+                      'resistance',
+                      'cpu_temperature',
+                      'oil_temperature',
+                      'helium_temperature',
+                      'water_in_temperature',
+                      'water_out_temperature',
+                      'pressure_low',
+                      'pressure_high',
+                      'error_code',
+                      'hours_of_operation']:
     logging.warn('Logging "%s" not implemented!' % quantity)
     return
 
@@ -41,7 +51,14 @@ def write(quantity, channel, value, address='D:/bluefors_logs'):
     logging.exception('Failed to write %s%s value %g because "%s" could not be accessed/created.' % (quantity, channel, value, target_dir))
     raise
   
-  fname = os.path.join(target_dir, 'CH{0} {1} {2}.log'.format(channel, {'kelvin': 'T', 'resistance': 'R'}[quantity], datestr))
+  if quantity in ['kelvin', 'resistance']:
+    fname = os.path.join(target_dir, 'CH{0} {1} {2}.log'.format(channel, {'kelvin': 'T',
+                                                                          'resistance': 'R'
+                                                                          }[quantity], datestr))
+  else:
+    fname = os.path.join(target_dir, '{0} {1} {2}.log'.format(channel, quantity, datestr))
+
+  
   try:
     with open(fname,'a') as f:
       f.write(tt.strftime('%d-%m-%y,%H:%M:%S,') + ("%.6E\n" % value))
