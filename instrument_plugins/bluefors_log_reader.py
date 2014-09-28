@@ -114,12 +114,6 @@ class bluefors_log_reader(Instrument):
         '''
         logging.info(__name__ + ' : resetting instrument')
         pass
-
-    def temperature(self, channel, t=None):
-      '''
-      Alias for get_temperature(...).
-      '''
-      return self.get_temperature(channel, t)
       
     def get_temperature(self, channel, t=None):
         '''
@@ -138,12 +132,6 @@ class bluefors_log_reader(Instrument):
         return self.__interpolate_value_at_time(
           'T%d' % channel, lambda t: self.__load_data(t, 'CH%s T %%s.log' % channel), t)
 
-    def resistance(self, channel, t=None):
-        '''
-        Alias for get_resistance(...)
-        '''
-        return self.get_resistance(channel, t)
-
     def get_resistance(self, channel, t=None):
         '''
         Gets the resistance of channel at time t.
@@ -160,12 +148,6 @@ class bluefors_log_reader(Instrument):
 
         return self.__interpolate_value_at_time(
           'R%d' % channel, lambda t: self.__load_data(t, 'CH%s R %%s.log' % channel), t)
-        
-    def pressure(self, channel, t=None):
-        '''
-        Alias for get_pressure(...).
-        '''
-        return self.get_pressure(channel, t)
 
     def get_pressure(self, channel, t=None):
         '''
@@ -194,12 +176,6 @@ class bluefors_log_reader(Instrument):
             
 	
         return self.__interpolate_value_at_time('P%d' % channel, load_pressure_data, t)
-
-    def flow(self, t=None):
-        '''
-        Alias for get_flow(...).
-        '''
-        return self.get_flow(t)
 
     def get_flow(self, t=None):
         '''
