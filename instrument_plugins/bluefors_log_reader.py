@@ -136,7 +136,7 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting temperature for channel {0} at t = {1}'.format(channel, str(t)))
         
         return self.__interpolate_value_at_time(
-          'T%d' % channel, lambda t: self.__load_data(t, 'CH%s T %%s.log' % channel) )
+          'T%d' % channel, lambda t: self.__load_data(t, 'CH%s T %%s.log' % channel), t)
 
     def resistance(self, channel, t=None):
         '''
@@ -159,7 +159,7 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting resistance for channel {0} at t = {1}'.format(channel, str(t)))
 
         return self.__interpolate_value_at_time(
-          'R%d' % channel, lambda t: self.__load_data(t, 'CH%s R %%s.log' % channel) )
+          'R%d' % channel, lambda t: self.__load_data(t, 'CH%s R %%s.log' % channel), t)
         
     def pressure(self, channel, t=None):
         '''
@@ -215,7 +215,7 @@ class bluefors_log_reader(Instrument):
         logging.debug(__name__ + ' : getting flow at t = {0}'.format(str(t)))
         
         return self.__interpolate_value_at_time(
-          'flow', lambda t: self.__load_data(t, 'Flowmeter %s.log'))
+          'flow', lambda t: self.__load_data(t, 'Flowmeter %s.log'), t)
 
     def do_get_latest_t(self, channel):
         '''
