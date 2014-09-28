@@ -92,6 +92,14 @@ class bluefors_log_reader(Instrument):
           load_param = lambda t, ss=self, p=param: ss.__load_data(t, '%s %%s.log' % p)
           interp_param = ( lambda t=None, pp=param_wo_spaces, load_fn=load_param:
                            self.__interpolate_value_at_time(pp, load_fn, t) )
+          interp_param.__doc__ = '''
+          Gets %s at time t.
+
+          Input:
+            t -- datetime object or a pair of them.
+                 If a single datetime, an interpolated value is returned.
+                 If a pair, all recorded points between are returned.
+          ''' % param
 
           setattr(self, 'get_%s' % param_wo_spaces, interp_param)
           self.add_function('get_%s' % param_wo_spaces)
@@ -149,7 +157,9 @@ class bluefors_log_reader(Instrument):
 
         Input:
             channel -- channel no.
-            t       -- datetime object
+            t -- datetime object or a pair of them.
+                 If a single datetime, an interpolated value is returned.
+                 If a pair, all recorded points between are returned.
 
         Output:
             temperature in K
@@ -166,7 +176,9 @@ class bluefors_log_reader(Instrument):
 
         Input:
             channel -- channel no.
-            t       -- datetime object
+            t -- datetime object or a pair of them.
+                 If a single datetime, an interpolated value is returned.
+                 If a pair, all recorded points between are returned.
 
         Output:
             resistance in Ohm
@@ -183,7 +195,9 @@ class bluefors_log_reader(Instrument):
 
         Input:
             channel -- channel no.
-            t       -- datetime object
+            t -- datetime object or a pair of them.
+                 If a single datetime, an interpolated value is returned.
+                 If a pair, all recorded points between are returned.
 
         Output:
             pressure of channel in mbar at time t. nan if sensor was off.
@@ -210,7 +224,9 @@ class bluefors_log_reader(Instrument):
         Gets the flow at time t.
 
         Input:
-            t       -- datetime object
+            t -- datetime object or a pair of them.
+                 If a single datetime, an interpolated value is returned.
+                 If a pair, all recorded points between are returned.
 
         Output:
             flow in mmol/s
@@ -292,7 +308,9 @@ class bluefors_log_reader(Instrument):
         Input:
             load_data(t)  -- function that loads the data in the neighborhood of time t
                              as a sequence of pairs [timestamp_as_datetime, value_as_float]
-            at_time    -- datetime object
+            at_time    -- time to interpolate to, given as a datetime object.
+                          Alternatively, at_time can be a pair of datetime objects specifying
+                          a time range for which all recorded points are returned.
             value_name -- the value being queried, e.g. T1, T2, ... P1, P2, ...
             cache_life_time -- specifies how long previously parsed data is used (in seconds) before reparsing
             
@@ -307,7 +325,20 @@ class bluefors_log_reader(Instrument):
         
         # Check if a cache file for the given date exists
         
-        cache_file_name = "%d-%d-%d_%s_bflog.npy" % (t.year, t.month, t.day, value_name)
+        try:
+          if t[1] == None: t[1] = datetime.datetime.now(tz.tzlocal())
+          if (t[1] - t[0]).total_seconds() <= 0:
+            logging.warn('%s is not a pair of increasing datetime objects.', t)
+            return np.array([])
+          range_given = True
+          cache_file_name = "%d-%d-%d_%d-%d-%d_%s_bflog.npy" % (t[0].year, t[0].month, t[0].day,
+                                                                t[1].year, t[1].month, t[1].day,
+                                                                value_name)
+        except:
+          # Assume that t is a datetime object
+          range_given = False
+          cache_file_name = "%d-%d-%d_%s_bflog.npy" % (t.year, t.month, t.day, value_name)
+
         cache_file_path = os.path.join(qt.config.get('tempdir'), cache_file_name)
         data = None
         from_cache = False
@@ -342,6 +373,10 @@ class bluefors_log_reader(Instrument):
           if (t - data[-1][0]).total_seconds() > 305:
             logging.warn('last %s point from %s ago.' % (value_name, str(t - data[-1][0])))
           return data[-1][1]
+
+        # if a range was specified, return all points in it
+        if range_given:
+          return data[np.logical_and(data[:,0] > t[0], data[:,0] < t[1])]
       
         # create the interpolating function
         interpolating_fn = interpolate.interp1d([ (d[0] - self._UNIX_EPOCH).total_seconds() for d in data ], data[:,1],
@@ -358,7 +393,10 @@ class bluefors_log_reader(Instrument):
 
 
     def __load_data(self, t, filename, valueformats=['f'], usecols=None):
-      ''' Load data from the specified day as well as the preceding and following ones.
+      ''' Load data from the day specified by t (datetime object)
+          as well as the preceding and following ones.
+          Alternatively, t can be a pair of datetime objects, in which case
+          it is interpreted as a date range to load.
 
           filename must be a string with "%s" in place of the date string,
             e.g., "Flowmeter %s.log".
@@ -371,8 +409,20 @@ class bluefors_log_reader(Instrument):
       '''
 
       all_data = None
-      for tt in [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)]:
-        datestr = self.__time_to_datestr(tt)
+
+      try:
+        assert (t[1] - t[0]).total_seconds() > 0, 't is not a pair of increasing datetime objects.'
+        dates = [ self.__time_to_datestr(t[0]) ]
+        i = 0
+        while self.__time_to_datestr(t[1]) != dates[-1]:
+          i += 1
+          dates.append(self.__time_to_datestr( t[0] + datetime.timedelta(i,0,0,0) ))
+      except:
+        # Assume that t is a datetime object
+        dates = map(self.__time_to_datestr,
+                    [t-datetime.timedelta(1,0,0,0), t, t+datetime.timedelta(1,0,0,0)])
+
+      for datestr in dates:
         fname = os.path.join(self._address, datestr, filename % datestr)
         try:
           data = np.loadtxt(fname,
@@ -397,7 +447,7 @@ class bluefors_log_reader(Instrument):
             all_data = np.concatenate((all_data, data), axis=0)
 
         except IOError as e:
-          pass # this is fairly normal, especially if tt is in the future
+          pass # this is fairly normal, especially if datestr is in the future
 
         except Exception as e:
           logging.exception('Failed to load data from %s.' % str(fname))
