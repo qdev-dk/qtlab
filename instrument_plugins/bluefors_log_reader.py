@@ -70,10 +70,35 @@ class bluefors_log_reader(Instrument):
         self.add_parameter('latest_flow',
             flags=Instrument.FLAG_GET, units='mmol/s', type=types.FloatType, format='%.3f')
 
+        self.add_function('get_all')
         self.add_function('get_temperature')
         self.add_function('get_pressure')
         self.add_function('get_flow')
-        self.add_function ('get_all')
+
+        # Add a number of parameters that are stored and named according to the same convention.
+        self._params_in_common_format = [('turbo frequency', 'Hz'),
+                                         ('turbo power', 'W'),
+                                         ('turbo temperature_body', 'C'),
+                                         ('turbo temperature_bearing', 'C'),
+                                         ('turbo temperature_controller', 'C'),
+                                         ('compressor oil_temperature', 'C'),
+                                         ('compressor helium_temperature', 'C'),
+                                         ('compressor water_in_temperature', 'C'),
+                                         ('compressor water_out_temperature', 'C'),
+                                         ('compressor pressure_low', 'psi (absolute)'),
+                                         ('compressor pressure_high', 'psi (absolute)')]
+        for param,units in self._params_in_common_format:
+          param_wo_spaces = param.replace(' ','_')
+          load_param = lambda t, ss=self, p=param: ss.__load_data(t, '%s %%s.log' % p)
+          interp_param = ( lambda t=None, pp=param_wo_spaces, load_fn=load_param:
+                           self.__interpolate_value_at_time(pp, load_fn, t) )
+
+          setattr(self, 'get_%s' % param_wo_spaces, interp_param)
+          self.add_function('get_%s' % param_wo_spaces)
+
+          setattr(self, 'do_get_latest_%s' % param_wo_spaces, interp_param)
+          self.add_parameter('latest_%s' % param_wo_spaces, format='%.3g', units=units,
+                             flags=Instrument.FLAG_GET, type=types.FloatType)
         
         self.add_function('base_heater_current_to_t6')
 
@@ -99,8 +124,11 @@ class bluefors_log_reader(Instrument):
         for ch in self._tchannels: getattr(self, 'get_latest_t%s' % ch)()
         for ch in self._rchannels: getattr(self, 'get_latest_r%s' % ch)()
         for ch in self._pchannels: getattr(self, 'get_latest_p%s' % ch)()
-        
+
         self.get_latest_flow()
+
+        for param,units in self._params_in_common_format:
+          getattr(self, 'get_latest_%s' % param.replace(' ','_'))()
         
     def reset(self):
         '''
