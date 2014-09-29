@@ -376,7 +376,7 @@ class bluefors_log_reader(Instrument):
 
         # if a range was specified, return all points in it
         if range_given:
-          return data[np.logical_and(data[:,0] > t[0], data[:,0] < t[1])]
+          return data[np.logical_and(data[:,0] >= t[0], data[:,0] <= t[1])]
       
         # create the interpolating function
         interpolating_fn = interpolate.interp1d([ (d[0] - self._UNIX_EPOCH).total_seconds() for d in data ], data[:,1],
