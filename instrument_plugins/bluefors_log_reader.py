@@ -300,6 +300,77 @@ class bluefors_log_reader(Instrument):
       if scalar_input: return t6[0]
       else:            return t6
 
+    def find_cooldown(self, near=None, forward_search=False):
+      '''
+      Find the start and end time of a cooldown (returned as a pair of datetime objects).
+
+      near --- datetime object to begin the search from. Default is current time.
+      forward_search --- search forward/backward in time, if near is not within a cooldown.
+      '''
+
+      flow_threshold = 0.05
+      p1_threshold = 900.
+      def within_cooldown(t):
+        try:
+          p1 = self.get_pressure(1,t)
+          if p1 < p1_threshold:
+            return True
+          elif np.isnan(p1):
+            raise Exception # P1 sensor is off or no data exists.
+          else:
+            return False
+        except:
+          # fall back to checking flow
+          try: return self.get_flow(t) > flow_threshold
+          except: return False
+
+      dt_rough = datetime.timedelta(0.2*(2*int(forward_search)-1))
+
+      # find a point within a cooldown
+      if near == None:
+        t = datetime.datetime.now(tz.tzlocal()) - datetime.timedelta(0,120)
+      else:
+        t = near
+
+      for i in range(200):
+        t += dt_rough
+        if within_cooldown(t): break
+
+      assert within_cooldown(t), 'No cooldown found. Stopping search at: %s' % t
+
+      # find the start and end points
+      tstart = t
+      dt_rough = datetime.timedelta(0.5)
+
+      while within_cooldown(tstart):
+        tstart -= dt_rough
+
+      tend = t
+      now = datetime.datetime.now(tz.tzlocal())
+      while within_cooldown(tend) and tend < now:
+        tend += dt_rough
+
+      # get the end time more exactly based on flow
+      flow = self.get_flow((tstart, tend))
+      nonzero_flow = np.where(flow[:,1] > flow_threshold)[0]
+      if len(nonzero_flow) > 0: # may not be the case if still pre-cooling
+        tend = flow[nonzero_flow[-1], 0]
+        tflowstart = flow[nonzero_flow[0], 0]
+      else:
+        tflowstart = t
+
+      # get the start time more exactly based on P1
+      p1 = self.get_pressure(1, (tstart, tend))
+      vc_pumped = np.where(p1[:,1] < p1_threshold)[0]
+      if len(vc_pumped) > 0: # should always be the case, unless logging was off
+        tstart = min( p1[vc_pumped[0], 0],
+                      tflowstart )
+
+      # add some time to the beginning and end
+      tstart -= datetime.timedelta(0, 10*60)
+      tend += datetime.timedelta(1, 0)
+
+      return (tstart, tend)
 
     def __interpolate_value_at_time(self, value_name, load_data, at_time=None, interpolation_kind='linear', cache_life_time=10.):
         '''
