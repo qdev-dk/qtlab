@@ -254,10 +254,11 @@ class Cryomech_CP2800(Instrument):
             writeTimeout=None)
         try:
           serial_connection.write(msg)
-          qt.msleep(.01)
           m = ''
           while len(m) < 1 or m[-1] != '\r':
+            lastlen = len(m)
             m += serial_connection.read()
+            if lastlen == len(m): assert False, 'Timeout on serial port read.'
         finally:
           serial_connection.close()
 
@@ -341,21 +342,22 @@ class Cryomech_CP2800(Instrument):
     assert hash_code1 == hash_code[1], '0x%02x != 0x%02x' % (ord(hash_code1), ord(hash_code[1]))
     return data
 
+  def __log(self, quantity, value):
+    if self._logger != None:
+      try: self._logger(quantity, 'compressor', value)
+      except Exception as e: logging.debug('Could not log compressor %s: %s', quantity, str(e))
+
   def do_get_on(self):
     return (self.__read_int((0x5F, 0x95)) == 1)
 
   def do_get_hours_of_operation(self):
     ans = self.__read_int((0x45, 0x4C)) / 60.
-    if self._logger != None:
-      try: self._logger('hours_of_operation', 'compressor', ans)
-      except: logging.exception('Could not log compressor hours_of_operation.')
+    self.__log('hours_of_operation', ans)
     return ans
 
   def do_get_error_code(self):
     ans = self.__read_int((0x65, 0xA4))
-    if self._logger != None:
-      try: self._logger('error_code', 'compressor', ans)
-      except: logging.exception('Could not log compressor error_code.')
+    self.__log('error_code', ans)
     return ans
 
   def do_get_clock_battery_ok(self):
@@ -363,51 +365,37 @@ class Cryomech_CP2800(Instrument):
 
   def do_get_water_in_temperature(self):
     ans = 0.1 * self.__read_int((0x0D, 0x8F), 0)
-    if self._logger != None:
-      try: self._logger('water_in_temperature', 'compressor', ans)
-      except: logging.exception('Could not log compressor water_in_temperature.')
+    self.__log('water_in_temperature', ans)
     return ans
 
   def do_get_water_out_temperature(self):
     ans = 0.1 * self.__read_int((0x0D, 0x8F), 1)
-    if self._logger != None:
-      try: self._logger('water_out_temperature', 'compressor', ans)
-      except: logging.exception('Could not log compressor water_in_temperature.')
+    self.__log('water_out_temperature', ans)
     return ans
 
   def do_get_helium_temperature(self):
     ans = 0.1 * self.__read_int((0x0D, 0x8F), 2)
-    if self._logger != None:
-      try: self._logger('helium_temperature', 'compressor', ans)
-      except: logging.exception('Could not log compressor helium_temperature.')
+    self.__log('helium_temperature', ans)
     return ans
 
   def do_get_oil_temperature(self):
     ans = 0.1 * self.__read_int((0x0D, 0x8F), 3)
-    if self._logger != None:
-      try: self._logger('oil_temperature', 'compressor', ans)
-      except: logging.exception('Could not log compressor oil_temperature.')
+    self.__log('oil_temperature', ans)
     return ans
 
   def do_get_cpu_temperature(self):
     ans = 0.1 * self.__read_int((0x35, 0x74))
-    if self._logger != None:
-      try: self._logger('cpu_temperature', 'compressor', ans)
-      except: logging.exception('Could not log compressor cpu_temperature.')
+    self.__log('cpu_temperature', ans)
     return ans
 
   def do_get_pressure_high_side(self):
     ans = 0.1 * self.__read_int((0xAA, 0x50), 0)
-    if self._logger != None:
-      try: self._logger('pressure_high', 'compressor', ans)
-      except: logging.exception('Could not log compressor pressure_high.')
+    self.__log('pressure_high', ans)
     return ans
 
   def do_get_pressure_low_side(self):
     ans = 0.1 * self.__read_int((0xAA, 0x50), 1)
-    if self._logger != None:
-      try: self._logger('pressure_low', 'compressor', ans)
-      except: logging.exception('Could not log compressor pressure_low.')
+    self.__log('pressure_low', ans)
     return ans
 
   def do_get_pressure_high_side_average(self):
