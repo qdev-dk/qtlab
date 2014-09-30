@@ -23,20 +23,6 @@ import logging
 
 def write(quantity, channel, value, address='D:/bluefors_logs'):
 
-  if quantity not in ['kelvin',
-                      'resistance',
-                      'cpu_temperature',
-                      'oil_temperature',
-                      'helium_temperature',
-                      'water_in_temperature',
-                      'water_out_temperature',
-                      'pressure_low',
-                      'pressure_high',
-                      'error_code',
-                      'hours_of_operation']:
-    logging.warn('Logging "%s" not implemented!' % quantity)
-    return
-
   def __time_to_datestr(t): return '{0}-{1:02d}-{2:02d}'.format(str(t.year)[-2:], t.month, t.day)
 
   # construct the file name
