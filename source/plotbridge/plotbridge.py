@@ -123,6 +123,8 @@ class Plot():
     # dict of per-trace-properties, keys are trace_ids (i.e. randmon UUIDs)
     self._traces = OrderedDict()
 
+    self._already_warned_about_subprocess_version = False
+
     # create the output directory and copyt the helper files there
     self.update()
 
@@ -290,7 +292,9 @@ class Plot():
             call(call_args, cwd=out_dir, stdin=None, stdout=DEVNULL, stderr=DEVNULL,
                  timeout=preprocess_timeout)
           except:
-            logging.warn('Your version of subprocess.call() does not support the timeout parameter so the preprocess script can block execution indefinitely (if it hangs). You are encouraged to install the back-ported subprocess32 module ("pip install subprocess32").')
+            if not self._already_warned_about_subprocess_version:
+              logging.warn('Your version of subprocess.call() does not support the timeout parameter so the preprocess script can block execution indefinitely (if it hangs). You are encouraged to install the back-ported subprocess32 module ("pip install subprocess32").')
+              self._already_warned_about_subprocess_version = True
             subprocess.call(call_args, cwd=out_dir, stdin=None, stdout=DEVNULL, stderr=DEVNULL)
 
       except:
