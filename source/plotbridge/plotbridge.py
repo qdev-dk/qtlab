@@ -671,7 +671,7 @@ class Plot():
       return
 
     # delete the binary data file
-    bin_path = path.join(self.get_output_dir(), 'trace_%s.npy' % trace_id)
+    bin_path = os.path.join(self.get_output_dir(), 'trace_%s.npy' % trace_id)
     try:
       os.remove(bin_path)
     except:
