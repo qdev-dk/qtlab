@@ -107,7 +107,7 @@ class Plot(SharedGObject):
         output_dir = kwargs.pop('output_dir', '.')
         coorddim = kwargs.pop('coorddim', [0])
         valdim = kwargs.pop('valdim', [1])
-        name = kwargs.get('name', '')
+        name = kwargs.pop('name', '')
         if len(kwargs) > 0: logging.warn('Deprecated arguments ignored: %s' % str(kwargs.keys()))
 
         self._name = Plot._plot_list.new_item_name(self, name)
@@ -607,7 +607,7 @@ def plot(*args, **kwargs):
         ret (bool): whether to return plot object (default: True).
     '''
 
-    plotname = kwargs.pop('name', 'plot')
+    plotname = args[0] if (len(args) >= 1 and isinstance(args[0], basestring) and 'name' not in kwargs.keys()) else kwargs.pop('name', 'plot')
     ret = kwargs.pop('ret', True)
     graph = Plot._plot_list[plotname]
     if graph is None:

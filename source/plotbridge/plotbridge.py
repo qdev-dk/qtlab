@@ -47,9 +47,10 @@ class Plot():
   be executed using an external plot engine (e.g. gnuplot or Matlab).
   For example, the output for a plot of two traces called "iv" (using the "gnuplot_2d"
   template) consists of a directory 'iv' that contains:
+    * gnuplot_2d.cfg   (a text config file specifying which interpreter to use etc.)
     * gnuplot_2d.preprocess   (an optional script that preprocesses the trace data and/or plot script)
-    * gnuplot_2d.interactive  (an optional script that plots iv.gnuplot in an interactive mode,
-                               if different from running iv.gnuplot directly.)
+    * gnuplot_2d.interactive.py  (an optional script that plots iv.gnuplot in an interactive mode,
+                                  if different from running iv.gnuplot directly.)
     * iv.gnuplot              (the main plot script passed to the plot engine [gnuplot]) 
     * trace_UUID1.npy         (binary data for trace 1)
     * trace_UUID2.npy         (binary data for trace 2)
@@ -179,7 +180,7 @@ class Plot():
 
   def get_output_dir(self):
     '''Get output dir name.'''
-    return self._output_dir
+    return os.path.abspath(self._output_dir)
 
   def _set_template(self, template):
     '''
@@ -230,7 +231,7 @@ class Plot():
     try:
       env = Environment(loader=FileSystemLoader(template_dir),
                 trim_blocks=True,
-                keep_trailing_newline=True)
+                keep_trailing_newline=True) # This option requires at least version 2.7 of jinja2
       template = env.get_template(template_file)
     except:
       logging.exception('Could not load a template from %s. Refer to Jinja2 documentation for valid syntax.', self.get_template())
@@ -314,7 +315,7 @@ class Plot():
     template_dir, template_name, template_ext = self.get_template()
 
     if interactive:
-      plot_script = template_name + '.interactive'
+      plot_script = template_name + '.interactive' + (('.'+cfg['interactive-extension']) if 'interactive-extension' in cfg.keys() else '')
       interpreter = cfg['interactive-interpreter'] if 'interactive-interpreter' in cfg.keys() else ''
     else:
       plot_script = self.get_name(path_friendly=True) + cfg['extension']
@@ -349,7 +350,7 @@ class Plot():
     self.set_width()
     self.set_height()
     self.set_fontsize()
-    self.set_title()
+    self.set_title(self.get_name())
     self.set_legend()
     self.set_xlabel()
     self.set_x2label()
@@ -717,7 +718,10 @@ class Plot():
      principle mentioned in the class doc string.)
     '''
 
-    complex_dtypes = [np.complex, np.complex64, np.complex128, np.complex256, np.complexfloating, np.complex_]
+    complex_dtypes = [np.complex, np.complex64, np.complex128, np.complexfloating, np.complex_]
+    try: complex_dtypes.append(np.complex256) # 64-bit systems only? (Or maybe a numpy version thing.)
+    except AttributeError: pass
+
     if len(x.shape) == 1:
 
       if x.dtype in complex_dtypes:
