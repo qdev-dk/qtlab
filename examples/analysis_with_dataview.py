@@ -132,10 +132,10 @@ logging.info('sweeps based on the swept coordinate: ' + str(sweeps))
 # Plot each sweep separately
 ##############################################################################
 
-p = qt.plot(name=plot_title)
+p = qt.plot(name=plot_title).get_plot()
 time.sleep(1.) # This is necessary on slow computers/connections
-p.set_xlabel('t', update=False)
-p.set_ylabel('y', update=False)
+p.set_xlabel('t')
+p.set_ylabel('y')
 
 for sweep_start, sweep_end in sweeps:
   # Make a "shallow copy", i.e. only the mask of dd is independent of d.
@@ -148,8 +148,8 @@ for sweep_start, sweep_end in sweeps:
   assert len(np.unique(dd['heater_current'])) == 1
   heater_cur = dd['heater_current'][0]
 
-  p.add(np.array(( dd['t'], dd['y'] )).T, update=False)
-  p._data[-1]['title'] = '%g (mA)' % (heater_cur*1e3)
+  p.add_trace(dd['t'], dd['y'],
+              title='%g (mA)' % (heater_cur*1e3))
 
 p.update()
 
