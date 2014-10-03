@@ -86,18 +86,10 @@ class _PlotList(namedlist.NamedList):
     def add(self, name, item):
         '''Add an item to the list.'''
         if name in self._list:
-            self.remove(name, send_quit=False)
+            self.remove(name)
         self._list[name] = item
         self._last_item = item
         self.emit('item-added', name)
-
-    def remove(self, name, send_quit=True):
-        '''Remove a plot.'''
-        if name in self:
-            self[name].clear()
-            if send_quit:
-                self[name].quit()
-        namedlist.NamedList.remove(self, name)
 
 
 class Plot(SharedGObject):
