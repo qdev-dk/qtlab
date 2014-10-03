@@ -500,7 +500,7 @@ class bluefors_log_reader(Instrument):
                             dtype={
                               'names': tuple(itertools.chain(['date', 'time'], ['value%d' % i for i in range(len(valueformats)) ])),
                               'formats': tuple(itertools.chain(['S9', 'S8'], valueformats))
-                            }, delimiter=',', usecols=usecols)
+                            }, delimiter=',', usecols=usecols, ndmin=1)
 
           # convert the date & time strings to a datetime object
           data = np.array([ list(itertools.chain(
@@ -518,7 +518,7 @@ class bluefors_log_reader(Instrument):
             all_data = np.concatenate((all_data, data), axis=0)
 
         except IOError as e:
-          pass # this is fairly normal, especially if datestr is in the future
+          pass # file doesn't exist. this is fairly normal, especially if datestr is in the future
 
         except Exception as e:
           logging.exception('Failed to load data from %s.' % str(fname))
