@@ -176,7 +176,7 @@ class Plot():
 
   def get_name(self, path_friendly=False):
     '''Get plot name.'''
-    return self._name if not path_friendly else self._name.strip().replace(' ','_')
+    return self._name if not path_friendly else self._name.strip().replace(' ','_').replace('/','-').replace('\\','_')
 
   def get_output_dir(self):
     '''Get output dir name.'''
