@@ -23,6 +23,7 @@ if qt_path != None and os.path.join(qt_path, 'source') not in sys.path: sys.path
 
 try:
   import qt
+  import plot
 except Exception as e:
   logging.exception('Is "%s" the correct path to the main qtlab directory?' % qt_path)
   raise e
@@ -49,7 +50,6 @@ logging.getLogger().level = log_level
 # Load data
 ################################################################################
 
-plot_title = 'dataview example'
 
 # Make up some fake data, typically you would initialize
 # the Data objects from files instead.
@@ -132,8 +132,7 @@ logging.info('sweeps based on the swept coordinate: ' + str(sweeps))
 # Plot each sweep separately
 ##############################################################################
 
-p = qt.plot(name=plot_title).get_plot()
-time.sleep(1.) # This is necessary on slow computers/connections
+p = plot.get_plot(name='dataview example').get_plot()
 p.set_xlabel('t')
 p.set_ylabel('y')
 
