@@ -50,15 +50,15 @@ set output "output.png"
 {% endif %}
 
 
-{% if global_opts.xrange and global_opts.xrange[0] and global_opts.xrange[1] %}set xrange [{{ global_opts.xrange[0] }}:{{ global_opts.xrange[1] }}]
+{% if not global_opts.xrange|allnone %}set xrange [{{ global_opts.xrange[0] | emptyifnone }}:{{ global_opts.xrange[1] | emptyifnone }}]
 {% endif %}
-{% if global_opts.x2range and global_opts.x2range[0] and global_opts.x2range[1] %}set x2range [{{ global_opts.x2range[0] }}:{{ global_opts.x2range[1] }}]
+{% if not global_opts.x2range|allnone %}set x2range [{{ global_opts.x2range[0] | emptyifnone }}:{{ global_opts.x2range[1] | emptyifnone }}]
 {% endif %}
-{% if global_opts.yrange and global_opts.yrange[0] and global_opts.yrange[1] %}set yrange [{{ global_opts.yrange[0] }}:{{ global_opts.yrange[1] }}]
+{% if not global_opts.yrange|allnone %}set yrange [{{ global_opts.yrange[0] | emptyifnone }}:{{ global_opts.yrange[1] | emptyifnone }}]
 {% endif %}
-{% if global_opts.y2range and global_opts.y2range[0] and global_opts.y2range[1] %}set y2range [{{ global_opts.y2range[0] }}:{{ global_opts.y2range[1] }}]
+{% if not global_opts.y2range|allnone %}set y2range [{{ global_opts.y2range[0] | emptyifnone }}:{{ global_opts.y2range[1] | emptyifnone }}]
 {% endif %}
-{% if global_opts.zrange and global_opts.zrange[0] and global_opts.zrange[1] %}set zrange [{{ global_opts.zrange[0] }}:{{ global_opts.zrange[1] }}]
+{% if not global_opts.zrange|allnone %}set zrange [{{ global_opts.zrange[0] | emptyifnone }}:{{ global_opts.zrange[1] | emptyifnone }}]
 {% endif %}
 
 

@@ -232,6 +232,10 @@ class Plot():
       env = Environment(loader=FileSystemLoader(template_dir),
                 trim_blocks=True,
                 keep_trailing_newline=True) # This option requires at least version 2.7 of jinja2
+
+      env.filters['emptyifnone'] = lambda x: '' if x == None else x
+      env.filters['allnone'] = lambda x: min(map(lambda y: y == None, x)) # check if all entries of iterable are None
+
       template = env.get_template(template_file)
     except:
       logging.exception('Could not load a template from %s. Refer to Jinja2 documentation for valid syntax.', self.get_template())
@@ -781,6 +785,7 @@ if __name__ == "__main__":
   voltage_units = 1e-6
 
   current = np.linspace(-5,5,41) * current_units
+  p.set_xrange(-5.5,None) # None means autorange
 
   for i in range(2):
     # linear IV
