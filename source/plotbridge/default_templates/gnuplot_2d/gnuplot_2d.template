@@ -123,6 +123,8 @@ plot \
         {%- endif %} \
 {% if trace.color!=None %}
    linecolor rgb "{{ trace.color }}" \
+{% else %}
+   linecolor {{ loop.index }} \
 {% endif %}
 {% if trace.points %}
    pointtype {{ trace.pointtype|ifnone(7) }} \
