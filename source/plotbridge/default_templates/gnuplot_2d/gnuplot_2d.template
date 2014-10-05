@@ -60,15 +60,15 @@ set output "output.png"
 {% else %}unset grid
 {% endif %}
 
-{% if not global_opts.xrange|allnone %}set xrange [{{ global_opts.xrange[0] | emptyifnone }}:{{ global_opts.xrange[1] | emptyifnone }}]
+{% if not global_opts.xrange|allnone %}set xrange [{{ global_opts.xrange[0]|ifnone('') }}:{{ global_opts.xrange[1]|ifnone('') }}]
 {% endif %}
-{% if not global_opts.x2range|allnone %}set x2range [{{ global_opts.x2range[0] | emptyifnone }}:{{ global_opts.x2range[1] | emptyifnone }}]
+{% if not global_opts.x2range|allnone %}set x2range [{{ global_opts.x2range[0]|ifnone('') }}:{{ global_opts.x2range[1]|ifnone('') }}]
 {% endif %}
-{% if not global_opts.yrange|allnone %}set yrange [{{ global_opts.yrange[0] | emptyifnone }}:{{ global_opts.yrange[1] | emptyifnone }}]
+{% if not global_opts.yrange|allnone %}set yrange [{{ global_opts.yrange[0]|ifnone('') }}:{{ global_opts.yrange[1]|ifnone('') }}]
 {% endif %}
-{% if not global_opts.y2range|allnone %}set y2range [{{ global_opts.y2range[0] | emptyifnone }}:{{ global_opts.y2range[1] | emptyifnone }}]
+{% if not global_opts.y2range|allnone %}set y2range [{{ global_opts.y2range[0]|ifnone('') }}:{{ global_opts.y2range[1]|ifnone('') }}]
 {% endif %}
-{% if not global_opts.zrange|allnone %}set zrange [{{ global_opts.zrange[0] | emptyifnone }}:{{ global_opts.zrange[1] | emptyifnone }}]
+{% if not global_opts.zrange|allnone %}set zrange [{{ global_opts.zrange[0]|ifnone('') }}:{{ global_opts.zrange[1]|ifnone('') }}]
 {% endif %}
 
 {% if global_opts.title %}set title "{{ global_opts.title }}"
@@ -121,26 +121,22 @@ plot \
         {% else %}
            {%- if trace.lines %}lines{% endif %}{% if trace.points or not trace.lines %}points{% endif %}{#<-- use points if neither lines nor points is specified.#}
         {%- endif %} \
-{% if trace.color %}
-   lc rgb "{{ trace.color }}" \
+{% if trace.color!=None %}
+   linecolor rgb "{{ trace.color }}" \
 {% endif %}
-{% if trace.pointtype and trace.points %}
-   pt {{ trace.pointtype }} \
+{% if trace.points %}
+   pointtype {{ trace.pointtype|ifnone(7) }} \
 {% endif %}
-{% if trace.pointsize and trace.points %}
-   ps {{ trace.pointsize }} \
+{% if trace.pointsize!=None and trace.points %}
+   pointsize {{ trace.pointsize }} \
 {% endif %}
-{% if trace.linetype and trace.lines %}
-   lt {{ trace.linetype }} \
+{% if trace.lines %}
+   linetype {{ trace.linetype|ifnone(1) }} \
 {% endif %}
-{% if trace.linewidth and trace.lines %}
-   lw {{ trace.linewidth }} \
+{% if trace.linewidth!=None and trace.lines %}
+   linewidth {{ trace.linewidth }} \
 {% endif %}
-{% if trace.title %}
-   title "{{ trace.title }}" \
-{% else %}
-   title "" \
-{% endif %}
+   title "{{ trace.title|ifnone('') }}" \
    axes {% if trace.top %}x2{% else %}x1{% endif %}{% if trace.right %}y2{% else %}y1{% endif %}{% if not loop.last %}, \
 {% endif %}
 {% endfor %}
@@ -167,7 +163,8 @@ replot
 {% endif %}
 
 {% if global_opts.show_on_screen %}
-set term wxt enhanced size figwidth,figheight {% if global_opts.title %}title "{{ global_opts.title }}"{% endif %}
+set term wxt enhanced size figwidth,figheight {% if global_opts.title %}title "{{ global_opts.title }}"{% endif %} dashed
+# replace "dashed" with "solid" if you want to ignore "linetype"/"lt" in plot
 
 replot
 bind Close "exit gnuplot"

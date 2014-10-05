@@ -233,7 +233,7 @@ class Plot():
                 trim_blocks=True,
                 keep_trailing_newline=True) # This option requires at least version 2.7 of jinja2
 
-      env.filters['emptyifnone'] = lambda x: '' if x == None else x
+      env.filters['ifnone'] = lambda x, default='': default if x == None else x
       env.filters['allnone'] = lambda x: min(map(lambda y: y == None, x)) # check if all entries of iterable are None
 
       template = env.get_template(template_file)
@@ -247,8 +247,6 @@ class Plot():
     for trace_id in self._traces.keys():
       d = dict(self._traces[trace_id])
       d['npyfile'] = 'trace_%s.npy' % trace_id
-      for o in d.keys():
-        if d[o] == None: del d[o]
       trace_opts.append(d)
 
     # Generate the plot script

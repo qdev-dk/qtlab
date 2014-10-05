@@ -50,15 +50,15 @@ set output "output.png"
 {% endif %}
 
 
-{% if not global_opts.xrange|allnone %}set xrange [{{ global_opts.xrange[0] | emptyifnone }}:{{ global_opts.xrange[1] | emptyifnone }}]
+{% if not global_opts.xrange|allnone %}set xrange [{{ global_opts.xrange[0]|ifnone('') }}:{{ global_opts.xrange[1]|ifnone('') }}]
 {% endif %}
-{% if not global_opts.x2range|allnone %}set x2range [{{ global_opts.x2range[0] | emptyifnone }}:{{ global_opts.x2range[1] | emptyifnone }}]
+{% if not global_opts.x2range|allnone %}set x2range [{{ global_opts.x2range[0]|ifnone('') }}:{{ global_opts.x2range[1]|ifnone('') }}]
 {% endif %}
-{% if not global_opts.yrange|allnone %}set yrange [{{ global_opts.yrange[0] | emptyifnone }}:{{ global_opts.yrange[1] | emptyifnone }}]
+{% if not global_opts.yrange|allnone %}set yrange [{{ global_opts.yrange[0]|ifnone('') }}:{{ global_opts.yrange[1]|ifnone('') }}]
 {% endif %}
-{% if not global_opts.y2range|allnone %}set y2range [{{ global_opts.y2range[0] | emptyifnone }}:{{ global_opts.y2range[1] | emptyifnone }}]
+{% if not global_opts.y2range|allnone %}set y2range [{{ global_opts.y2range[0]|ifnone('') }}:{{ global_opts.y2range[1]|ifnone('') }}]
 {% endif %}
-{% if not global_opts.zrange|allnone %}set zrange [{{ global_opts.zrange[0] | emptyifnone }}:{{ global_opts.zrange[1] | emptyifnone }}]
+{% if not global_opts.zrange|allnone %}set zrange [{{ global_opts.zrange[0]|ifnone('') }}:{{ global_opts.zrange[1]|ifnone('') }}]
 {% endif %}
 
 
@@ -109,7 +109,7 @@ splot \
    binary matrix \
    title ""
 
-# This works well if you have evenly space "slow axis" data
+# This works well if you have evenly spaced "slow axis" data
 #plot \
 #   "image_matrix.gnuplot_binary_matrix" \
 #   binary matrix with image \
