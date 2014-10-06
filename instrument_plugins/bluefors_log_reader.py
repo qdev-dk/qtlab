@@ -27,6 +27,7 @@ import os
 import qt
 import time
 import itertools
+import re
 
 class bluefors_log_reader(Instrument):
     '''
@@ -305,6 +306,7 @@ class bluefors_log_reader(Instrument):
       Find the start and end time of a cooldown (returned as a pair of datetime objects).
 
       near --- datetime object to begin the search from. Default is current time.
+               Alternatively, can be a string in the "YY-MM-DD" format.
       forward_search --- search forward/backward in time, if near is not within a cooldown.
       '''
 
@@ -326,12 +328,19 @@ class bluefors_log_reader(Instrument):
 
       dt_rough = datetime.timedelta(0.2*(2*int(forward_search)-1))
 
-      # find a point within a cooldown
+      # convert input to a datetime object
       if near == None:
         t = datetime.datetime.now(tz.tzlocal()) - datetime.timedelta(0,120)
-      else:
+      elif isinstance(near, datetime.datetime):
         t = near
+      else:
+        parsed = self.__parse_datestr(near)
+        if parsed != None:
+          t = parsed
+        else:
+          raise Exception('%s is neither None, a datetime object, or a string in the "YY-MM-DD" format.' % str(near))
 
+      # find a point within a cooldown
       for i in range(200):
         t += dt_rough
         if within_cooldown(t): break
@@ -371,6 +380,96 @@ class bluefors_log_reader(Instrument):
       tend += datetime.timedelta(1, 0)
 
       return (tstart, tend)
+
+    def plot(self, start=None, end=None, time_since_start_of_day=False,
+             flow=False, temperatures=True, resistances=False, pressures=False, turbo=False, compressor=False):
+      '''
+      Plot statistics for the time range (start, end), specified as datetime objects,
+      or alternatively, as strings in the "YY-MM-DD" format.
+
+      If end is None, the current time is used.
+      If start is None, the start of the previous cooldown before end is used.
+
+      time_since_start_of_day means that the time axis will be given in hours
+      since the beginning of the first day in the included range
+      (makes it easier to figure out the corresponding time of day).
+      Otherwise, it will be in hours since the first point.
+
+      Returns the end points of the plotted timerange.
+      '''
+
+      ends = [None, None]
+      for i,t in enumerate([start, end]):
+        if t == None:
+          continue
+        elif isinstance(t, datetime.datetime):
+          ends[i] = t
+        else:
+          parsed = self.__parse_datestr(t)
+          if parsed != None:
+            ends[i] = parsed
+            if i == 1: ends[i] += datetime.timedelta(0, 23*3600 + 59*60 + 59)
+          else:
+            raise Exception('%s is neither None, a datetime object, or a string in the "YY-MM-DD" format.' % str(t))
+
+      if ends[1] == None: ends[1] = datetime.datetime.now(tz.tzlocal())
+      if ends[0] == None: ends[0] = self.find_cooldown(near=ends[1])[0]
+
+      logging.info('Plotting %s.', ends)
+
+      import plot
+      p = plot.get_plot('BlueFors stats').get_plot()
+      p.clear()
+      p.set_title('BlueFors stats from %s to %s' % (ends[0].strftime('%Y-%m-%d'), ends[1].strftime('%m-%d')))
+      p.set_xlabel('time (h)')
+      p.set_ylog(True)
+
+      quantities_to_plot = []
+
+      if flow:
+        quantities_to_plot.append( ('flow (mmol/s)', self.get_flow(ends), 0, 5 ) )
+
+      if temperatures:
+        for ch in self._tchannels:
+          quantities_to_plot.append( ('T%s (K)' % ch, self.get_temperature(ch, ends), ch, 7 ) )
+
+      if resistances:
+        for ch in self._rchannels:
+          quantities_to_plot.append( ('R%s ({/Symbol O})' % ch, self.get_resistance(ch, ends), ch, 8 ) )
+
+      if pressures:
+        for ch in self._pchannels:
+          quantities_to_plot.append( ('P%s (mBar)' % ch, self.get_pressure(ch, ends), ch, 6 ) )
+
+      prefixes = []
+      if turbo: prefixes.append('turbo ')
+      if compressor: prefixes.append('compressor ')
+      for prefix in prefixes:
+
+        for paramno, param_and_units in enumerate(self._params_in_common_format):
+            param, units = param_and_units
+
+            if param.startswith(prefix):
+              quantities_to_plot.append( ('%s (%s)' % (param.replace('_',' '), units),
+                getattr(self, 'get_%s' % param.replace(' ','_'))(ends),
+                paramno, 9 if prefix.startswith('turbo') else 10 ) )
+
+      for title,pts,color,pointtype in quantities_to_plot:
+        ref_time = datetime.datetime(ends[0].year, ends[0].month, ends[0].day, 0, 0, tzinfo=tz.tzlocal()) if time_since_start_of_day else ends[0]
+        if len(pts) == 0:
+          logging.warn('No %s data for the specified time period.', title)
+          continue
+        hours_since_beginning = np.array([ (t - ref_time).total_seconds() for t in pts[:,0] ]) / 3600.
+        p.add_trace(hours_since_beginning, pts[:,1].astype(np.float),
+                    points=True, lines=True,
+                    color=color,
+                    pointtype=pointtype,
+                    title=title)
+
+      p.update()
+      p.run()
+
+      return ends
 
     def __interpolate_value_at_time(self, value_name, load_data, at_time=None, interpolation_kind='linear', cache_life_time=10.):
         '''
@@ -530,12 +629,15 @@ class bluefors_log_reader(Instrument):
 
 
     def __time_to_datestr(self, t):
-        return '{0}-{1:02d}-{2:02d}'.format(str(t.year)[-2:], t.month, t.day)
+      ''' Generate a string in the "YY-MM-DD" format from a date, i.e.,
+          the same format as the folder naming for the BlueFors log files. '''
+      return '{0}-{1:02d}-{2:02d}'.format(str(t.year)[-2:], t.month, t.day)
 
+    def __parse_datestr(self, datestr):
+      ''' Parse a date given in the "YY-MM-DD" format, i.e.,
+          the same format as the folder naming for the BlueFors log files. '''
+      m = re.match(r'(\d\d)-(\d\d)-(\d\d)', datestr)
+      if m == None: return None
+      assert len(m.groups()) == 3
 
-    def __line_to_datetime_val_pair(self, datestr, timestr, valstr):
-        dateparts = datestr.split('-')
-        timeparts = timestr.split(':')
-        parsed_time = datetime.datetime(int('20'+(dateparts[2])), int(dateparts[1]), int(dateparts[0]), int(timeparts[0]), int(timeparts[1]), int(timeparts[2]), tzinfo=tz.tzlocal())
-        val = float(valstr)
-        return [ parsed_time, val ]
+      return datetime.datetime(int('20'+m.group(1)), int(m.group(2)), int(m.group(3)), 0, 0, tzinfo=tz.tzlocal())
