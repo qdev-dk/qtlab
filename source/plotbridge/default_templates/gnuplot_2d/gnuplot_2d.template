@@ -122,7 +122,11 @@ plot \
            {%- if trace.lines %}lines{% endif %}{% if trace.points or not trace.lines %}points{% endif %}{#<-- use points if neither lines nor points is specified.#}
         {%- endif %} \
 {% if trace.color!=None %}
+  {% if trace.color|isint %}
+   linecolor {{ trace.color }} \
+  {% else %}
    linecolor rgb "{{ trace.color }}" \
+  {% endif %}
 {% else %}
    linecolor {{ loop.index }} \
 {% endif %}
