@@ -1,8 +1,6 @@
 # This file contains user-specific settings for qtlab.
 # It is run as a regular python script.
 
-import os
-
 # Do not change the following line unless you know what you are doing
 config.remove([
             'datadir',
@@ -27,10 +25,10 @@ config['allowed_ips'] = (
 config['instrument_server'] = False
 
 ## This sets a default location for data-storage
-config['datadir'] = 'd:/data' if os.name == 'nt' else '../data'
+#config['datadir'] = 'd:/data'
 
 ## This sets a default directory for qtlab to start in
-config['startdir'] = 'd:/scripts' if os.name == 'nt' else '../scripts'
+#config['startdir'] = 'd:/scripts'
 
 ## A default script (or list of scripts) to run after qtlab started
 config['startscript'] = []      #e.g. 'initscript1.py'
@@ -41,8 +39,8 @@ config['exitscript'] = []       #e.g. ['closescript1.py', 'closescript2.py']
 # Add directories containing scripts here. All scripts will be added to the
 # global namespace as functions.
 config['scriptdirs'] = [
-#        'examples/scripts',
-        'd:/scripts' if os.name == 'nt' else '../scripts'
+        'examples/scripts',
+#        'd:/scripts',
 ]
 
 ## This sets a user instrument directory
@@ -61,7 +59,7 @@ config['startgui'] = True
 
 # Default gnuplot terminal
 #config['gnuplot_terminal'] = 'x11'
-config['gnuplot_terminal'] = 'wxt'
+#config['gnuplot_terminal'] = 'wxt'
 #config['gnuplot_terminal'] = 'windows'
 
 # Enter a filename here to log all IPython commands
