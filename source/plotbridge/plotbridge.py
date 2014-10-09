@@ -639,11 +639,15 @@ class Plot():
       try: os.remove(trace_npy)
       except: pass # normal if there was no previous version
     else:
+      # Convert all inputs to float for simplicity.
+      # Should not be a big problem for plotting purposes...
+      dd = dd.astype(np.float)
+
       # Use the default numpy binary format for output
       # Write to a temp file (.new) first and rename it once its complete.
       # This way the update is atomic from the point of view of
       # external programs that monitor changes to the file.
-      dd.tofile(trace_npy + '.new')
+      dd.astype(np.float).tofile(trace_npy + '.new')
       shutil.move(trace_npy + '.new', trace_npy)
 
       # Update the 'recordformat' field for the trace.
