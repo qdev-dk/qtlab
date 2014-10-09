@@ -102,6 +102,9 @@ def usleep(usec):
 
 def get_ipython():
     import IPython
+    if ipython_is_newer((1,0,0)):
+        from IPython.terminal.interactiveshell import TerminalInteractiveShell
+        return TerminalInteractiveShell.instance()
     if ipython_is_newer((0, 11)):
         return IPython.core.ipapi.get()
     else:

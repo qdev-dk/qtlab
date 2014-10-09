@@ -21,6 +21,10 @@ SET PATH=%CD%\3rd_party\Console2\;%PATH%
 ::SET PATH=%CD%\3rd_party\gtk\bin;%CD%\3rd_party\gtk\lib;%PATH%
 
 :: Check for version of python
+IF EXIST C:\Anaconda32bit\python.exe (
+    SET PYTHON_PATH=C:\Anaconda32bit
+    GOTO mark1
+)
 IF EXIST c:\python27\python.exe (
     SET PYTHON_PATH=c:\python27
     GOTO mark1

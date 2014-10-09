@@ -7,6 +7,10 @@
 SET PATH=%CD%\3rd_party\Console2\;%PATH%
 
 :: Check for version of python
+IF EXIST C:\Anaconda\python.exe (
+    SET PYTHON_PATH=C:\Anaconda
+    GOTO mark1
+)
 IF EXIST c:\python27\python.exe (
     SET PYTHON_PATH=c:\python27
     GOTO mark1
@@ -28,6 +32,8 @@ IF EXIST "%PYTHON_PATH%\scripts\ipython-script.py" (
     start Console -w "Ipython" -r "/k %PYTHON_PATH%\python.exe %PYTHON_PATH%\scripts\ipython-script.py"
     GOTO EOF
 )
+
+::start Console -w C:\Anaconda\pythonw.exe "C:\Anaconda\Scripts/ipython-script.py" qtconsole
 
 echo Failed to run ipython.bat
 pause
