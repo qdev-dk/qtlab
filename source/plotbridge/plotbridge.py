@@ -158,8 +158,11 @@ class Plot():
         for f in os.listdir(d):
           if f.endswith('.lock'): continue # don't remove lock files
           ppp = os.path.join(d,f)
-          if   os.path.isfile(ppp) or os.path.islink(ppp): os.unlink(ppp)
-          elif os.path.isdir(ppp): logging.warn('Ignoring directory %s', ppp) #shutil.rmtree(ppp)  # Normally there are no subdirs, so stay on the safe side and don't delete them...
+          try:
+            if   os.path.isfile(ppp) or os.path.islink(ppp): os.unlink(ppp)
+            elif os.path.isdir(ppp): logging.warn('Ignoring directory %s', ppp) #shutil.rmtree(ppp)  # Normally there are no subdirs, so stay on the safe side and don't delete them...
+          except:
+            pass # files may be locked by other processes (especially on Windows), keep removing others
       except:
         logging.exception('Could not remove old %s', d)
 
