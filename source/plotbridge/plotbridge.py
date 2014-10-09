@@ -368,6 +368,7 @@ class Plot():
     self.set_x2log()
     self.set_ylog()
     self.set_y2log()
+    self.set_zlog()
     self.set_xticks()
     self.set_x2ticks()
     self.set_yticks()
@@ -476,6 +477,11 @@ class Plot():
     '''Set log scale on top y axis.'''
     assert isinstance(val, bool), 'y2log must be set to True or False.'
     self._global_opts['y2log'] = val
+
+  def set_zlog(self, val=False):
+    '''Set log scale on z/colorbar.'''
+    assert isinstance(val, bool), 'zlog must be set to True or False.'
+    self._global_opts['zlog'] = val
 
   def set_xticks(self, val=True, options=None):
     '''Enable/disable ticks on left x axis.'''

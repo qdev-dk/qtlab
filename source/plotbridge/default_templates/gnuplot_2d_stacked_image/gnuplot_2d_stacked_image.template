@@ -31,7 +31,11 @@ set output "output.png"
 {% endif %}
 
 
-{% if global_opts.ylabel %}set cblabel "{{ global_opts.ylabel }}"
+{% if global_opts.xlabel %}set xlabel "{{ global_opts.xlabel }}"
+{% endif %}
+{% if global_opts.ylabel %}set ylabel "{{ global_opts.ylabel }}"
+{% endif %}
+{% if global_opts.zlabel %}set cblabel "{{ global_opts.zlabel }}"
 {% endif %}
 
 {% if global_opts.xlog %}set logscale x
@@ -42,9 +46,7 @@ set output "output.png"
 {% endif %}
 {% if global_opts.y2log %}set logscale y2
 {% endif %}
-{% if global_opts.zlog %}set logscale z
-{% endif %}
-{% if global_opts.cblog %}set logscale cb
+{% if global_opts.zlog %}set logscale cb
 {% endif %}
 {% if global_opts.grid %}set grid
 {% endif %}
