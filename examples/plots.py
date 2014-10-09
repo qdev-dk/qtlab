@@ -3,6 +3,8 @@ import qt
 import plot
 import logging
 
+####### Simple plot #######
+
 x = np.arange(-10, 10, 0.2)
 y = np.sinc(x)
 
@@ -35,11 +37,32 @@ p.set_yrange(-0.3, 1.1)
 # Nothing is actually generated before you call this!
 p.update()
 
-# This reopens the plot, if you closed it
-p.run()
+#p.run() # This reopens the plot, if you closed it
+
 
 logging.info('Output of the plot is stored in: %s', p.get_output_dir())
 
+
+####### Another example #######
+
+p = plot.get_plot('stacked image plot',
+                  template='gnuplot_2d_stacked_image', # You can create your own template as well!
+                  replace_if_exists=True)
+p = p.get_plot()
+p.set_xlabel('frequency (GHz)')
+p.set_ylabel('B field (mT)')
+p.set_zlabel('transmission (a.u.)')
+p.set_zlog(True)
+
+freq = np.arange(1.0, 1.4, 0.005)
+for bfield in np.arange(-2,2,0.1):
+  transmission = 1 + 1/(0.01 + ( freq - (1.3 - np.abs(bfield)) )**2) # fake data
+  p.add_trace(freq, transmission,
+              slowcoordinate=bfield)
+
+p.update()
+
+#p.run() # This reopens the plot, if you closed it
 
 
 # You can also plot Data objects directly.
@@ -68,7 +91,8 @@ d = qt.Data('test data')
 d.add_coordinate('frequency', units='s')
 d.add_value('amplitude', units='V')
 
-p_data_object = plot.get_plot(name='data object plotting')
+p_data_object = plot.get_plot(name='data object plotting',
+                              replace_if_exists=True)
 p_data_object.add_data(d)
 p_data_object.set_default_labels()
 
