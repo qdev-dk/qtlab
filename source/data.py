@@ -26,6 +26,7 @@ import re
 import logging
 import copy
 import shutil
+import pickle
 
 from gettext import gettext as _L
 
@@ -235,6 +236,17 @@ class Data(SharedGObject):
             tempfile (bool), default False. If True create a temporary file
                 for the data.
             binary (bool), default True. Whether tempfile should be binary.
+            cache_path, default None. If specified, create a binary temp file
+                             in the specified directory after loading the data.
+                             Or if it already exists, load the data
+                             directly from it.
+            overwrite_cache, default False. Overwrite an existing cache file, if it exists.
+            row_mask, optional list of booleans that specifies which rows
+                      from an existing data file are loaded. If None, all
+                      rows are loaded. All rows beyond len(row_mask) are
+                      ignored.
+              True  --> the data point (row) is loaded
+              False --> the data point (row) is ignored
         '''
 
         # Init SharedGObject a bit lower
@@ -242,12 +254,15 @@ class Data(SharedGObject):
         name = kwargs.get('name', '')
         infile = kwargs.get('infile', True)
         inmem = kwargs.get('inmem', False)
-
+        self._cache_path = kwargs.get('cache_path', None)
+        self._overwrite_cache = kwargs.get('overwrite_cache', False)
+        self._load_row_mask = kwargs.get('row_mask')
         self._inmem = inmem
         self._tempfile = kwargs.get('tempfile', False)
         self._temp_binary = kwargs.get('binary', True)
         self._options = kwargs
         self._file = None
+        self._log_file_handler = None
         self._stop_req_hid = None
 
         # Dimension info
@@ -269,7 +284,10 @@ class Data(SharedGObject):
         self._npoints_last_block = 0
         self._npoints_max_block = 0
 
+        # list of (rowno, commentstring) tuples, where
+        # rowno indicates the data row before which comment should appear.
         self._comment = []
+
         self._localtime = time.localtime()
         self._timestamp = time.asctime(self._localtime)
         self._timemark = time.strftime('%H%M%S', self._localtime)
@@ -313,7 +331,16 @@ class Data(SharedGObject):
         return ret
 
     def __getitem__(self, index):
-        return self._data[index]
+        '''
+        Access the data as an ndarray.
+
+        index may be a slice or a string, in which case it is interpreted
+        as a dimension name.
+        '''
+        if isinstance(index, basestring):
+            return self.get_data()[:,self.get_dimension_index(index)]
+        else:
+            return self.get_data()[index]
 
     def __setitem__(self, index, val):
         self._data[index] = val
@@ -335,6 +362,9 @@ class Data(SharedGObject):
         else:
             return 0
 
+    def get_dimension_names(self):
+        return [ self.get_dimension_name(i) for i in range(self.get_ndimensions()) ]
+
     def get_dimension_name(self, dim):
         '''Return the name of dimension dim'''
 
@@ -342,6 +372,13 @@ class Data(SharedGObject):
             return 'col%d' % dim
         else:
             return self._dimensions[dim].get('name', 'col%d' % dim)
+
+    def get_dimension_index(self, name):
+        '''Return the index of the dimension with the given name'''
+        if name==None: raise Exception('Dimension name cannot be None.')
+        for i,d in enumerate(self._dimensions):
+            if d.get('name', None) == name: return i
+        raise Exception('Dimension "%s" does not exist.' % name)
 
     def get_ndimensions(self):
         '''Return number of dimensions.'''
@@ -495,6 +532,10 @@ class Data(SharedGObject):
         fn, ext = os.path.splitext(self.get_filepath())
         return fn + '.set'
 
+    def get_log_filepath(self):
+        fn, ext = os.path.splitext(self.get_filepath())
+        return fn + '.log'
+
     def is_file_open(self):
         '''Return whether a file is open or not.'''
 
@@ -550,21 +591,22 @@ class Data(SharedGObject):
 
     def add_comment(self, comment):
         '''Add comment to the Data object.'''
-        self._comment.append(comment)
+        self._comment.append([self.get_npoints(), comment])
         if self._file is not None:
             self._file.write('# %s\n' % comment)
 
-    def get_comment(self):
+    def get_comment(self, include_row_numbers=False):
         '''Return the comment for the Data object.'''
-        return self._comment
+        return self._comment if include_row_numbers else [ commentstr for rowno,commentstr in self._comment ]
 
 ### File writing
 
-    def create_file(self, name=None, filepath=None, settings_file=True):
+    def create_file(self, name=None, filepath=None, settings_file=True, log_file=True, log_level=logging.INFO):
         '''
         Create a new data file and leave it open. In addition a
         settings file is generated, unless settings_file=False is
-        specified.
+        specified. A copy of log messages generated during the measurement
+        will also be saved, unless log_file=False.
 
         This function should be called after adding the comment and the
         coordinate and value metadata, because it writes the file header.
@@ -591,6 +633,9 @@ class Data(SharedGObject):
         if settings_file and in_qtlab:
             self._write_settings_file()
 
+        if log_file and in_qtlab:
+            self._open_log_file()
+
         try:
             if in_qtlab:
                 self._stop_req_hid = \
@@ -602,8 +647,13 @@ class Data(SharedGObject):
 
     def close_file(self):
         '''
-        Close open data file.
+        Close open data and log files.
         '''
+
+        if self._log_file_handler is not None:
+            logging.getLogger().removeHandler(self._log_file_handler)
+            self._log_file_handler.close()
+            self._log_file_handler = None
 
         if self._file is not None:
             self._file.close()
@@ -612,6 +662,19 @@ class Data(SharedGObject):
         if self._stop_req_hid is not None and in_qtlab:
             qt.flow.disconnect(self._stop_req_hid)
             self._stop_req_hid = None
+
+    def _open_log_file(self, log_level=logging.INFO):
+        fn = self.get_log_filepath()
+        if len(logging.getLogger().handlers) > 0:
+          formatter = logging.getLogger().handlers[0].formatter
+        else:
+          formatter = None
+
+        self._log_file_handler = logging.FileHandler(fn)
+        self._log_file_handler.setLevel(log_level)
+        self._log_file_handler.setFormatter(formatter)
+        logging.getLogger().addHandler(self._log_file_handler)
+        logging.debug('Added log_file_handler. path="%s", formatter="%s"' % (fn, str(formatter)))
 
     def _write_settings_file(self):
         fn = self.get_settings_filepath()
@@ -631,8 +694,8 @@ class Data(SharedGObject):
     def _write_header(self):
         self._file.write('# Filename: %s\n' % self._filename)
         self._file.write('# Timestamp: %s\n\n' % self._timestamp)
-        for line in self._comment:
-            self._file.write('# %s\n' % line)
+        for rowno,line in self._comment:
+            if rowno == 0: self._file.write('# %s\n' % line)
 
         i = 1
         for dim in self._dimensions:
@@ -699,27 +762,41 @@ class Data(SharedGObject):
 
     def _write_data(self):
         if not self._inmem:
-            logging.warning('Unable to _write_data() without having it memory')
+            logging.warning('Unable to _write_data() without having it in memory')
             return False
 
         blockcols = self._get_block_columns()
 
+        non_header_comments = filter(lambda rowno,commentstr: rowno!=0, self._comments)
+        non_header_comments_rowno = np.array([rowno for rowno,commentstr in non_header_comments])
+        non_header_comments_commentstr = [commentstr for rowno,commentstr in non_header_comments]
+
         lastvals = None
-        for vals in self._data:
+        for rowno, vals in enumerate(self._data):
             if type(vals) is numpy.ndarray and lastvals is not None:
                 for i in range(len(vals)):
                     if blockcols[i] and vals[i] != lastvals[i]:
                         self._file.write('\n')
+
+            # write comments preceding the data point, if any.
+            for commentind in np.where(non_header_comments_rowno == rowno):
+                self._file.write('# %s\n' % line)
 
             self._write_data_line(vals)
             lastvals = vals
 
     def _write_binary(self):
         if not self._inmem:
-            logging.warning('Unable to _write_binary() without having it memory')
+            logging.warning('Unable to _write_binary() without having it in memory')
             return False
 
-        self._data.tofile(self._file.get_file())
+        try:
+            self._data.tofile(self._file.get_file())
+        except NotImplementedError as e:
+            # This is raised (at least in Python 2.7),
+            # if self._data is a numpy.ma masked array,
+            # instead of a regular ndarray.
+            numpy.array(self._data).tofile(self._file.get_file())
         return True
 
 ### High-level file writing
@@ -881,7 +958,13 @@ class Data(SharedGObject):
             if len(self._data) == 0:
                 self._data = numpy.atleast_2d(args)
             else:
-                self._data = numpy.append(self._data, [args], axis=0)
+                args_n_dims = len(numpy.array(args).shape)
+                if args_n_dims == 1:
+                  self._data = numpy.append(self._data, [args], axis=0)
+                elif args_n_dims == 2:
+                  self._data = numpy.append(self._data, args, axis=0)
+                else:
+                  assert False, 'args should not have more than 2 dimensions here...'
 
         if self._infile:
             if npoints == 1:
@@ -1010,6 +1093,20 @@ class Data(SharedGObject):
         Load data from file and store internally.
         """
 
+        cache = None
+
+        if self._cache_path != None:
+            cache_fname = os.path.join(self._cache_path, os.path.splitext(self._filename)[0]) + '_tmp.npz'
+            if not self._overwrite_cache:
+                try:
+                    cache = numpy.load(cache_fname)
+                    logging.info('Loaded data from cache file %s.' % cache_fname)
+                    if self._load_row_mask != None:
+                      logging.warn('The row_mask will be ignored since data is loaded from a cache file.')
+                except Exception as e:
+                    logging.info('Failed to load data from cache file %s: %s' % (cache_fname, e))
+
+        # read the header normally from the text file
         try:
             f = file(self.get_filepath(), 'r')
         except:
@@ -1019,7 +1116,7 @@ class Data(SharedGObject):
         self._dimensions = []
         self._values = []
         self._comment = []
-        data = []
+        data = None
         nfields = 0
 
         self._block_sizes = []
@@ -1029,11 +1126,17 @@ class Data(SharedGObject):
 
         blocksize = 0
 
+        row_no = -1
+
+        if self._load_row_mask != None:
+            last_row_no_to_parse = self._load_row_mask.nonzero()[0][-1]
+
         for line in f:
+
             line = line.rstrip(' \n\t\r')
 
             # Count blocks
-            if len(line) == 0 and len(data) > 0:
+            if len(line) == 0 and data != None:
                 self._block_sizes.append(blocksize)
                 if blocksize > self._npoints_max_block:
                     self._npoints_max_block = blocksize
@@ -1042,7 +1145,7 @@ class Data(SharedGObject):
             # Strip comment
             commentpos = line.find('#')
             if commentpos != -1:
-                self._parse_meta_data(line)
+                self._parse_meta_data(line, line_number = row_no+1 + (-1 if commentpos > 0 else 0))
                 line = line[:commentpos]
 
             fields = line.split()
@@ -1051,15 +1154,51 @@ class Data(SharedGObject):
 
             fields = [float(f) for f in fields]
             if len(fields) > 0:
-                data.append(fields)
+
+                row_no += 1
+                if self._load_row_mask != None:
+                  if row_no > last_row_no_to_parse: break # stop parsing
+
+                  if not self._load_row_mask[row_no]:
+                    continue # skip this row
+
+                if cache != None:
+                    # we are done parsing the header and the first data row
+                    # load rest from the cache and stop parsing the text file
+                    self._data = cache['data']
+                    self._comment = pickle.loads(cache['comment_pickled'])
+                    blocksize = cache['blocksize'][0]
+                    nfields = self._data.shape[1]
+                    break
+
+                if data == None: # allocate a buffer for the data
+                    # estimate the (max) number of data rows from the file size
+                    n_lines_estimate = 1 + os.path.getsize(self.get_filepath()) / len(line)
+                    if self._load_row_mask != None: # We may not need that much space
+                        n_lines_estimate = numpy.min(( n_lines_estimate,
+                                                       self._load_row_mask.astype(numpy.bool).sum() ))
+                    data = numpy.empty((n_lines_estimate, len(fields))) + numpy.nan
+
+                if row_no >= len(data):
+                    logging.warn('Failed to estimate the number of data points correctly. Allocating more space...')
+                    data_larger = numpy.empty(( int(numpy.ceil( 1.5*len(data) )), len(fields) )) + numpy.nan
+                    data_larger[:len(data),:] = data[:,:]
+                    data = data_larger
+
+                data[row_no,:] = numpy.array(fields)
                 blocksize += 1
 
         self._add_missing_dimensions(nfields)
         self._count_coord_val_dims()
 
-        self._data = numpy.array(data)
+        if cache == None:
+          logging.info('Finished reading %d data points. Data buffer size was %d points.' % (row_no, len(data)))
+          self._data = data[:1+row_no,:]
+
         self._npoints = len(self._data)
         self._inmem = True
+
+        logging.debug('Read %u data points.' % (len(self._data)))
 
         self._npoints_last_block = blocksize
 
@@ -1067,6 +1206,15 @@ class Data(SharedGObject):
             self._detect_dimensions_size()
         except Exception, e:
             logging.warning('Error while detecting dimension size')
+
+        if cache == None and self._cache_path != None:
+            try:
+                numpy.savez(cache_fname,
+                         data=self._data,
+                         blocksize=numpy.array([blocksize]),
+                         comment_pickled=numpy.array(pickle.dumps(self._comment)))
+            except Exception as e:
+                logging.warn('Failed to save cache file %s: %s' % (cache_fname,e))
 
         return True
 
@@ -1076,7 +1224,7 @@ class Data(SharedGObject):
         elif name == 'values':
             self._nvalues += 1
 
-    def _parse_meta_data(self, line):
+    def _parse_meta_data(self, line, line_number):
         m = self._META_STEPRE.match(line)
         if m is not None:
             self._dimensions.append({'size': int(m.group(1))})
@@ -1100,6 +1248,12 @@ class Data(SharedGObject):
                     self._dimensions[colnum][tagname] = int(m.group(1))
                 else:
                     try:
+                        if m.group(1) in ['time']:
+                            # list of commonly used column names NOT that should not be eval'd.
+                            # to be honest, I don't understand why you ever want them to be...
+                            msg = 'Not evaluating "%s" as python code.' % m.group(1)
+                            logging.info(msg)
+                            raise Exception(msg)
                         self._dimensions[colnum][tagname] = eval(m.group(1))
                     except:
                         self._dimensions[colnum][tagname] = m.group(1)
@@ -1111,7 +1265,7 @@ class Data(SharedGObject):
 
         m = self._META_COMMENTRE.match(line)
         if m is not None:
-            self._comment.append(m.group(1))
+            self._comment.append( (line_number, m.group(1)) )
 
     def _reshape_data(self):
         '''

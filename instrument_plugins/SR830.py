@@ -19,7 +19,10 @@ from instrument import Instrument
 import visa
 import types
 import logging
+import numpy as np
+import qt
 import time
+import re
 
 class SR830(Instrument):
     '''
@@ -46,7 +49,7 @@ class SR830(Instrument):
         logging.info(__name__ + ' : Initializing instrument')
         Instrument.__init__(self, name, tags=['physical'])
         self._address = address
-        self._visainstrument = visa.instrument(self._address)
+        self._visainstrument = visa.instrument(self._address, timeout=5.)
 
         self.add_parameter('mode',
            flags=Instrument.FLAG_SET,
@@ -93,43 +96,14 @@ class SR830(Instrument):
                 18 : "10ks",
                 19 : "30ks"
             })
+        self.add_parameter('tau_in_seconds', flags=Instrument.FLAG_GETSET, units='s', type=types.FloatType) # for convenience
+
         self.add_parameter('out', type=types.FloatType, channels=(1,2,3,4),
             flags=Instrument.FLAG_GETSET,
             minval=-10.5, maxval=10.5, units='V', format='%.3f')
         self.add_parameter('in', type=types.FloatType, channels=(1,2,3,4),
             flags=Instrument.FLAG_GET,
             minval=-10.5, maxval=10.5, units='V', format='%.3f')
-        self.add_parameter('sensitivity', type=types.IntType,
-            flags=Instrument.FLAG_GETSET,
-            format_map={
-                0 : "2nV",
-                1 : "5nV",
-                2 : "10nV",
-                3 : "20nV",
-                4 : "50 nV",
-                5 : "100nV",
-                6 : "200nV",
-                7 : "500nV",
-                8 : "1muV",
-                9 : "2muV",
-                10 : "5muV",
-                11 : "10muV",
-                12 : "20muV",
-                13 : "50muV",
-                14 : "100muV",
-                15 : "200muV",
-                16 : "500muV",
-                17 : "1mV",
-                18 : "2mV",
-                19 : "5mV",
-                20 : "10mV",
-                21 : "20mV",
-                22 : "50mV",
-                23 : "100mV",
-                24 : "200mV",
-                25 : "500mV",
-                26 : "1V"
-            })
         self.add_parameter('reserve', type=types.IntType,
                            flags=Instrument.FLAG_GETSET,
                            format_map={0:'High reserve', 1:'Normal', 2:'Low noise'})
@@ -170,13 +144,57 @@ class SR830(Instrument):
                            flags=Instrument.FLAG_GET,
                            format_map={False:'normal', True:'overload'})
 
+        self._sensitivities_symbolic = {
+                0 : "2nV",
+                1 : "5nV",
+                2 : "10nV",
+                3 : "20nV",
+                4 : "50nV",
+                5 : "100nV",
+                6 : "200nV",
+                7 : "500nV",
+                8 : "1muV",
+                9 : "2muV",
+                10 : "5muV",
+                11 : "10muV",
+                12 : "20muV",
+                13 : "50muV",
+                14 : "100muV",
+                15 : "200muV",
+                16 : "500muV",
+                17 : "1mV",
+                18 : "2mV",
+                19 : "5mV",
+                20 : "10mV",
+                21 : "20mV",
+                22 : "50mV",
+                23 : "100mV",
+                24 : "200mV",
+                25 : "500mV",
+                26 : "1V"
+            }
+        self.add_parameter('sensitivity', type=types.IntType,
+            flags=Instrument.FLAG_GETSET,
+            format_map=self._sensitivities_symbolic)
+            
+        # convert to volts
+        unit_conversion = {'n': 1e-9, 'mu': 1e-6, 'm': 1e-3, '': 1.}
+        self._sensitivities = [ (x[0],
+                                 (lambda m: int(m[0])*unit_conversion[m[1]])(re.match(r'\s*(\d+)\s*([nmu]*)V', x[1]).groups())
+                                 ) for x in self._sensitivities_symbolic.iteritems() ]
+        self._sensitivities = dict(self._sensitivities)
+
         self.add_function('reset')
         self.add_function('get_all')
+        self.add_function('reset_averaging')
 
+        self.clear_output_buffer()
         if reset:
             self.reset()
         else:
             self.get_all()
+
+        self.direct_output()
 
     # Functions
     def reset(self):
@@ -190,8 +208,19 @@ class SR830(Instrument):
             None
         '''
         logging.info(__name__ + ' : Resetting instrument')
-        self._visainstrument.write('*RST')
+        self.__write('*RST')
+        self.clear_output_buffer()
         self.get_all()
+
+    def clear_output_buffer(self):
+        ''' Make sure there are no old replies in the visa buffer. '''
+        old_timeout = self._visainstrument.timeout
+        self._visainstrument.timeout = 0.3
+        while True:
+          try: r = self._visainstrument.read()
+          except: break
+          if len(r) == 0: break
+        self._visainstrument.timeout = old_timeout
 
     def get_all(self):
         '''
@@ -207,6 +236,7 @@ class SR830(Instrument):
         logging.info(__name__ + ' : reading all settings from instrument')
         self.get_sensitivity()
         self.get_tau()
+        self.get_tau_in_seconds()
         self.get_frequency()
         self.get_amplitude()
         self.get_phase()
@@ -229,32 +259,58 @@ class SR830(Instrument):
         self.get_time_constant_overload()
         self.get_output_overload()
 
+    def __ask(self, msg):
+      ''' Internal helper that retries a few times in case the first attempt to communicate with the instrument fails. '''
+      max_attempts = 5
+      for attempt in range(max_attempts):
+        try:
+          return self._visainstrument.ask(msg)
+        except:
+          logging.exception('Attempt %d/%d to ask %s from SR830 failed.' % (1+attempt, max_attempts, msg))
+          qt.msleep(attempt**2 * 1.)
+          self.clear_output_buffer()
+          if attempt == max_attempts-1: raise # last attempt failed
+      raise Exception('This line should be unreachable.')
+
+    def __write(self, msg):
+      ''' Internal helper that retries a few times in case the first attempt to communicate with the instrument fails. '''
+      max_attempts = 5
+      for attempt in range(max_attempts):
+        try:
+          return self._visainstrument.write(msg)
+        except:
+          logging.exception('Attempt %d/%d to write %s to SR830 failed.' % (1+attempt, max_attempts, msg))
+          qt.msleep(attempt**2 * 1.)
+          self.clear_output_buffer()
+          if attempt == max_attempts-1: raise # last attempt failed
+      raise Exception('This line should be unreachable.')
+        
     def disable_front_panel(self):
         '''
         enables the front panel of the lock-in
         while being in remote control
         '''
-        self._visainstrument.write('OVRM 0')
+        self.__write('OVRM 0')
 
     def enable_front_panel(self):
         '''
         enables the front panel of the lock-in
         while being in remote control
         '''
-        self._visainstrument.write('OVRM 1')
+        self.__write('OVRM 1')
 
     def auto_phase(self):
         '''
         offsets the phase so that
         the Y component is zero
         '''
-        self._visainstrument.write('APHS')
+        self.__write('APHS')
 
     def direct_output(self):
         '''
         select GPIB as interface
         '''
-        self._visainstrument.write('OUTX 1')
+        self.__write('OUTX 1')
 
     def read_output(self,output, ovl):
         '''
@@ -274,18 +330,145 @@ class SR830(Instrument):
         3 : "R",
         4 : "P"
         }
-        self.direct_output()
+        #self.direct_output()
         if parameters.__contains__(output):
-            logging.info(__name__ + ' : Reading parameter from instrument: %s ' %parameters.get(output))
+            logging.debug(__name__ + ' : Reading parameter from instrument: %s ' %parameters.get(output))
             if ovl:
                 self.get_input_overload()
                 self.get_time_constant_overload()
                 self.get_output_overload()
-            readvalue = float(self._visainstrument.ask('OUTP?%s' %output))
+            readvalue = float(self.__ask('OUTP?%s' %output))
+            return readvalue
         else:
-            print 'Wrong output requested.'
-        return readvalue
+            raise Exception('Invalid output requested: %s' % str(output))
 
+    def reset_averaging(self, instruments=None):
+        '''
+        Resets the averaging by temporarily reducing the time constant.
+        
+        kwargs:
+          instruments -- reset the averaging on the specified list of instruments
+                         instead of 'self.'
+        '''
+    
+        insts = [self] if instruments == None else instruments
+
+        old_taus = [ i.get_tau() for i in insts ]
+        if np.array(old_taus).min() < 3: raise Exception('reset_averaging() not supported for tau < 3')
+
+        max_tau = np.array(old_taus).max()
+
+        # "erase" memory
+        #for i in insts: i.set_tau(0)
+        #qt.msleep(0.001)
+        
+        # set an intermediate tau
+        #for i,tau_old in zip(insts, old_taus): i.set_tau(tau_old - 3)
+        #qt.msleep(5*self.tau_index_to_seconds(max_tau - 3))
+        for i,tau_old in zip(insts, old_taus): i.set_tau(tau_old - 2)
+        qt.msleep(5*self.tau_index_to_seconds(max_tau - 2))
+        for i,tau_old in zip(insts, old_taus): i.set_tau(tau_old - 1)
+        qt.msleep(2*self.tau_index_to_seconds(max_tau - 1))
+        
+        # restore the old tau
+        for i,tau_old in zip(insts, old_taus): i.set_tau(tau_old)
+        
+    def wait_for_steady_value(self, derivative_sign_changes=2, soft_averages_when_sampling=.3, instruments=None):
+        '''
+        Block execution until the measured value settles.
+        
+        kwargs:
+          derivate_sign_changes --- wait for the sign of the time derivative of R to
+                                    change this many times
+          soft_averages_when_sampling  -- how long to average the samples (in units of tau)
+          instruments -- wait for the specified list of instruments
+                         instead of 'self.'
+        '''
+        insts = [self] if instruments == None else instruments
+        
+        r0 = (self.get_XY(soft_averages=soft_averages_when_sampling, instruments=insts)**2).sum(axis=1)
+        r1 = (self.get_XY(soft_averages=soft_averages_when_sampling, instruments=insts)**2).sum(axis=1)
+
+        sign_changed = np.array([ 0 for i in insts ], dtype=np.int)
+        while sign_changed.min() < derivative_sign_changes:
+          # get new samples
+          r2 = (self.get_XY(soft_averages=soft_averages_when_sampling, instruments=insts)**2).sum(axis=1)
+          #logging.debug('sampled r = %g' % r2)
+          
+          # check if the sign of the derivative changed
+          sign_changed += ((r2-r1) * (r1-r0) <= 0)
+          r0 = r1
+          r1 = r2
+          
+          logging.debug('sign_changed = %s' % str(sign_changed))
+          logging.debug('min(sign_changed) = %d < derivative_sign_changes = %d --> %s' % (sign_changed.min(), derivative_sign_changes, str(sign_changed.min() < derivative_sign_changes) ))
+        
+    def get_XY(self, ovl=False, soft_averages=None, instruments=None, auto_sensitivity=False):
+        '''
+        Get the current (X,Y) tuple.
+        
+        kwargs:
+          soft_averages --- None or >= 0.1, which causes software averaging of the measured XY.
+                            Specified in units of the time constant tau.
+                            Note that soft_average=1 is different from None, since
+                            the former averages (a few samples) over one tau, while
+                            the latter returns a value immediately.
+          instruments   --- return a list of (X,Y) tuples from the specified
+                            list of instruments instead of 'self.' This way you
+                            can do soft_averages on multiple instruments in parallel.
+          auto_sensitivity --- tune sensitivity automatically if it is completely wrong
+        '''
+        assert soft_averages == None or soft_averages > .1, 'soft_averages ~< 0 does not make sense.'
+        
+        insts = [self] if instruments == None else instruments
+        taus = [ i.get_tau_in_seconds() for i in insts ]
+        max_tau = np.array(taus).max()
+
+        assert soft_averages == None or max_tau > 0.090, 'soft_averages on ~< 100ms timescales is not a good idea.'
+        
+        while True: # repeat until value is in range
+        
+          xy = np.zeros((len(insts), 2), dtype=np.float)
+          
+          if soft_averages != None:
+            samples = np.max((2, int(np.round(3 * soft_averages))))
+            dt = soft_averages*max_tau / samples
+            for j in range(samples):
+              t0 = time.time()
+              xy[:,0] += np.array([ i.read_output(1, ovl) for i in insts ])
+              xy[:,1] += np.array([ i.read_output(2, ovl) for i in insts ])
+              qt.msleep(np.max((0., dt - (time.time() - t0))))
+            xy /= samples
+          else:
+            xy[:,0] += np.array([ i.read_output(1, ovl) for i in insts ])
+            xy[:,1] += np.array([ i.read_output(2, ovl) for i in insts ])
+
+          if auto_sensitivity:
+            out_of_range = False
+            sensitivity = np.array([ i.get_sensitivity() for i in insts ])
+            for i in range(len(insts)):
+              abs_val = np.abs(complex(*(xy[i])))
+              current_range = self._sensitivities[sensitivity[i]]
+              if abs_val > 0.9*current_range:
+                if sensitivity[i] == len(self._sensitivities)-1:
+                  logging.warn('Cannot increase sensitivity anymore!')
+                else:
+                  insts[i].set_sensitivity(sensitivity[i] + 1)
+                  out_of_range = True
+              elif abs_val < current_range/11.:
+                if sensitivity[i] == 0:
+                  logging.warn('Cannot decrease sensitivity anymore!')
+                else:
+                  insts[i].set_sensitivity(sensitivity[i] - 1)
+                  out_of_range = True
+
+            if out_of_range: continue # remeasure
+          
+          if instruments == None:
+            return xy[0,:]
+          else:
+            return xy
+        
     def do_get_X(self, ovl=False):
         '''
         Read out X of the Lock In
@@ -325,7 +508,7 @@ class SR830(Instrument):
             None
         '''
         logging.debug(__name__ + ' : setting frequency to %s Hz' % frequency)
-        self._visainstrument.write('FREQ %e' % frequency)
+        self.__write('FREQ %e' % frequency)
 
 
     def do_get_frequency(self):
@@ -338,9 +521,9 @@ class SR830(Instrument):
         Output:
             frequency (float) : frequency in Hz
         '''
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : reading frequency from instrument')
-        return float(self._visainstrument.ask('FREQ?'))
+        return float(self.__ask('FREQ?'))
 
     def do_get_amplitude(self):
         '''
@@ -352,13 +535,13 @@ class SR830(Instrument):
         Output:
             frequency (float) : frequency in Hz
         '''
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : reading frequency from instrument')
-        return float(self._visainstrument.ask('SLVL?'))
+        return float(self.__ask('SLVL?'))
 
     def do_set_mode(self,val):
         logging.debug(__name__ + ' : Setting Reference mode to external' )
-        self._visainstrument.write('FMOD %d' %val)
+        self.__write('FMOD %d' %val)
 
 
     def do_set_amplitude(self, amplitude):
@@ -372,12 +555,12 @@ class SR830(Instrument):
             None
         '''
         logging.debug(__name__ + ' : setting amplitude to %s V' % amplitude)
-        self._visainstrument.write('SLVL %e' % amplitude)
+        self.__write('SLVL %e' % amplitude)
 
 
     def do_set_tau(self,timeconstant):
         '''
-        Set the time constant of the LockIn
+        Set the index of time constant of the LockIn
 
         Input:
             time constant (integer) : integer from 0 to 19
@@ -386,13 +569,14 @@ class SR830(Instrument):
             None
         '''
 
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : setting time constant on instrument to %s'%(timeconstant))
-        self._visainstrument.write('OFLT %s' % timeconstant)
+        self.__write('OFLT %s' % timeconstant)
+        self.update_value('tau_in_seconds', self.tau_index_to_seconds(timeconstant))
 
     def do_get_tau(self):
         '''
-        Get the time constant of the LockIn
+        Get the index of time constant of the LockIn
 
         Input:
             None
@@ -400,9 +584,54 @@ class SR830(Instrument):
             time constant (integer) : integer from 0 to 19
         '''
 
-        self.direct_output()
-        logging.debug(__name__ + ' : getting time constant on instrument')
-        return float(self._visainstrument.ask('OFLT?'))
+        #self.direct_output()
+        r = self.__ask('OFLT?')
+        ind = int(r)
+        secs = self.tau_index_to_seconds(ind)
+        logging.debug(__name__ + ' : getting time constant on instrument: %s == %.1e s' % (r, secs))
+        self.update_value('tau_in_seconds', secs)
+        return ind
+
+    def do_get_tau_in_seconds(self):
+        '''
+        Get the time constant of the LockIn in seconds
+
+        Input:
+            None
+        Output:
+            time constant (float) : time constant in seconds
+        '''
+        return self.tau_index_to_seconds(self.get_tau())
+
+    def do_set_tau_in_seconds(self, val):
+        '''
+        Set the time constant of the LockIn in seconds
+
+        Input:
+            (float) : time constant in seconds. Allowed values are given in the doc for get_tau().
+        Output:
+            None
+        '''
+
+        ind = self.seconds_to_tau_index(val)
+        logging.debug('setting tau to %s --> %.1e' % (ind, val))
+        self.set_tau(ind)
+    
+    def tau_index_to_seconds(self, ind):
+        return 10**(-5 + int(ind)/2) * (1.+2*(int(ind)%2))
+    
+    def seconds_to_tau_index(self, val):
+        # check that a valid value was provided
+        if ( val < 10e-6-1e-9 or val > 30e3 + 1):
+          raise Exception('Invalid time constant %.3e. Out of range.' % val)
+
+        power = int(np.round(np.log10(val)))
+        prefactor = 10 ** (np.log10(val) % 1)
+        
+        if not ( np.abs(prefactor - 1.) < 1e-3 or np.abs(prefactor - 3.) < 1e-3 ):
+          raise Exception('Invalid time constant %.3e. The prefactor must be 1 or 3.' % val)
+
+        return (0 if np.abs(prefactor-1) < 0.1 else 1) + 2*(power+5)
 
     def do_set_sensitivity(self, sens):
         '''
@@ -415,9 +644,9 @@ class SR830(Instrument):
             None
         '''
 
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : setting sensitivity on instrument to %s'%(sens))
-        self._visainstrument.write('SENS %d' % sens)
+        self.__write('SENS %d' % sens)
 
     def do_get_sensitivity(self):
         '''
@@ -425,9 +654,15 @@ class SR830(Instrument):
             Output:
             sensitivity (integer) : integer from 0 to 26
         '''
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : reading sensitivity from instrument')
-        return float(self._visainstrument.ask('SENS?'))
+        return float(self.__ask('SENS?'))
+
+    def sensitivity_to_volts(self, index):
+        '''
+        converts the integer returned by get_sensitivity() to the corresponding voltage.
+        '''
+        return self._sensitivities[index]
 
     def do_get_phase(self):
         '''
@@ -439,9 +674,9 @@ class SR830(Instrument):
         Output:
             phase (float) : reference phase shit in degree
         '''
-        self.direct_output()
+        #self.direct_output()
         logging.debug(__name__ + ' : reading frequency from instrument')
-        return float(self._visainstrument.ask('PHAS?'))
+        return float(self.__ask('PHAS?'))
 
 
     def do_set_phase(self, phase):
@@ -455,7 +690,7 @@ class SR830(Instrument):
             None
         '''
         logging.debug(__name__ + ' : setting the reference phase shift to %s degree' %phase)
-        self._visainstrument.write('PHAS %e' % phase)
+        self.__write('PHAS %e' % phase)
 
     def set_aux(self, output, value):
         '''
@@ -467,7 +702,7 @@ class SR830(Instrument):
             None
         '''
         logging.debug(__name__ + ' : setting the output %(out)i to value %(val).3f' % {'out':output,'val': value})
-        self._visainstrument.write('AUXV %(out)i, %(val).3f' % {'out':output,'val':value})
+        self.__write('AUXV %(out)i, %(val).3f' % {'out':output,'val':value})
 
     def read_aux(self, output):
         '''
@@ -478,7 +713,7 @@ class SR830(Instrument):
             voltage on the output D/A converter
         '''
         logging.debug(__name__ + ' : reading the output %i' %output)
-        return float(self._visainstrument.ask('AUXV? %i' %output))
+        return float(self.__ask('AUXV? %i' %output))
 
     def get_oaux(self, value):
         '''
@@ -489,7 +724,7 @@ class SR830(Instrument):
             voltage on the input A/D converter
         '''
         logging.debug(__name__ + ' : reading the input %i' %value)
-        return float(self._visainstrument.ask('OAUX? %i' %value))
+        return float(self.__ask('OAUX? %i' %value))
 
     def do_set_out(self, value, channel):
         '''
@@ -513,135 +748,135 @@ class SR830(Instrument):
         '''
         Query reference input: internal (true,1) or external (false,0)
         '''
-        return int(self._visainstrument.ask('FMOD?'))==1
+        return int(self.__ask('FMOD?'))==1
 
     def do_set_ref_input(self, value):
         '''
         Set reference input: internal (true,1) or external (false,0)
         '''
         if value:
-            self._visainstrument.write('FMOD 1')
+            self.__write('FMOD 1')
         else:
-            self._visainstrument.write('FMOD 0')
+            self.__write('FMOD 0')
 
     def do_get_ext_trigger(self):
         '''
         Query trigger source for external reference: sine (0), TTL rising edge (1), TTL falling edge (2)
         '''
-        return int(self._visainstrument.ask('RSLP?'))
+        return int(self.__ask('RSLP?'))
 
     def do_set_ext_trigger(self, value):
         '''
         Set trigger source for external reference: sine (0), TTL rising edge (1), TTL falling edge (2)
         '''
-        self._visainstrument.write('RSLP '+ str(value))
+        self.__write('RSLP '+ str(value))
 
     def do_get_sync_filter(self):
         '''
         Query sync filter. Note: only available below 200Hz
         '''
-        return int(self._visainstrument.ask('SYNC?'))==1
+        return int(self.__ask('SYNC?'))==1
 
     def do_set_sync_filter(self, value):
         '''
         Set sync filter. Note: only available below 200Hz
         '''
         if value:
-            self._visainstrument.write('SYNC 1')
+            self.__write('SYNC 1')
         else:
-            self._visainstrument.write('SYNC 0')
+            self.__write('SYNC 0')
 
     def do_get_harmonic(self):
         '''
         Query detection harmonic in the range of 1..19999.
         Note: frequency*harmonic<102kHz
         '''
-        return int(self._visainstrument.ask('HARM?'))
+        return int(self.__ask('HARM?'))
 
     def do_set_harmonic(self, value):
         '''
         Set detection harmonic in the range of 1..19999.
         Note: frequency*harmonic<102kHz
         '''
-        self._visainstrument.write('HARM '+ str(value))
+        self.__write('HARM '+ str(value))
 
     def do_get_input_config(self):
         '''
         Query input configuration: A (0), A-B (1), CVC 1MOhm (2), CVC 100MOhm (3)
         '''
-        return int(self._visainstrument.ask('ISRC?'))
+        return int(self.__ask('ISRC?'))
 
     def do_set_input_config(self, value):
         '''
         Set input configuration: A (0), A-B (1), CVC 1MOhm (2), CVC 100MOhm (3)
         '''
-        self._visainstrument.write('ISRC '+ str(value))
+        self.__write('ISRC '+ str(value))
 
     def do_get_input_shield(self):
         '''
         Query input shield: float (false,0), gnd (true,1)
         '''
-        return int(self._visainstrument.ask('IGND?'))==1
+        return int(self.__ask('IGND?'))==1
 
     def do_set_input_shield(self, value):
         '''
         Set input shield: float (false,0), gnd (true,1)
         '''
         if value:
-            self._visainstrument.write('IGND 1')
+            self.__write('IGND 1')
         else:
-            self._visainstrument.write('IGND 0')
+            self.__write('IGND 0')
 
     def do_get_input_coupling(self):
         '''
         Query input coupling: AC (false,0), DC (true,1)
         '''
-        return int(self._visainstrument.ask('ICPL?'))==1
+        return int(self.__ask('ICPL?'))==1
 
     def do_set_input_coupling(self, value):
         '''
         Set input coupling: AC (false,0), DC (true,1)
         '''
         if value:
-            self._visainstrument.write('ICPL 1')
+            self.__write('ICPL 1')
         else:
-            self._visainstrument.write('ICPL 0')
+            self.__write('ICPL 0')
 
     def do_get_notch_filter(self):
         '''
         Query notch filter: none (0), 1xline (1), 2xline(2), both (3)
         '''
-        return int(self._visainstrument.ask('ILIN?'))
+        return int(self.__ask('ILIN?'))
 
     def do_set_notch_filter(self, value):
         '''
         Set notch filter: none (0), 1xline (1), 2xline(2), both (3)
         '''
-        self._visainstrument.write('ILIN ' + str(value))
+        self.__write('ILIN ' + str(value))
 
     def do_get_reserve(self):
         '''
         Query reserve: High reserve (0), Normal (1), Low noise (2)
         '''
-        return int(self._visainstrument.ask('RMOD?'))
+        return int(self.__ask('RMOD?'))
 
     def do_set_reserve(self, value):
         '''
         Set reserve: High reserve (0), Normal (1), Low noise (2)
         '''
-        self._visainstrument.write('RMOD ' + str(value))
+        self.__write('RMOD ' + str(value))
 
     def do_get_filter_slope(self):
         '''
         Query filter slope: 6dB/oct. (0), 12dB/oct. (1), 18dB/oct. (2), 24dB/oct. (3)
         '''
-        return int(self._visainstrument.ask('OFSL?'))
+        return int(self.__ask('OFSL?'))
 
     def do_set_filter_slope(self, value):
         '''
         Set filter slope: 6dB/oct. (0), 12dB/oct. (1), 18dB/oct. (2), 24dB/oct. (3)
         '''
-        self._visainstrument.write('OFSL ' + str(value))
+        self.__write('OFSL ' + str(value))
     def do_get_unlocked(self, update=True):
         '''
         Query if PLL is locked.
@@ -649,9 +884,9 @@ class SR830(Instrument):
         Set update to True for querying present unlock situation, False for querying past events
         '''
         if update:
-           self._visainstrument.ask('LIAS? 3')     #for realtime detection we clear the bit by reading it
+           self.__ask('LIAS? 3')     #for realtime detection we clear the bit by reading it
            time.sleep(0.02)                        #and wait for a little while so that it can be set
-        return int(self._visainstrument.ask('LIAS? 3'))==1
+        return int(self.__ask('LIAS? 3'))==1
 
     def do_get_input_overload(self, update=True):
         '''
@@ -660,9 +895,9 @@ class SR830(Instrument):
         Set update to True for querying present overload, False for querying past events
         '''
         if update:
-            self._visainstrument.ask('LIAS? 0')     #for realtime detection we clear the bit by reading it
+            self.__ask('LIAS? 0')     #for realtime detection we clear the bit by reading it
             time.sleep(0.02)                        #and wait for a little while so that it can be set again
-        return int(self._visainstrument.ask('LIAS? 0'))==1
+        return int(self.__ask('LIAS? 0'))==1
 
     def do_get_time_constant_overload(self, update=True):
         '''
@@ -671,9 +906,9 @@ class SR830(Instrument):
         Set update to True for querying present overload, False for querying past events
         '''
         if update:
-            self._visainstrument.ask('LIAS? 1')     #for realtime detection we clear the bit by reading it
+            self.__ask('LIAS? 1')     #for realtime detection we clear the bit by reading it
             time.sleep(0.02)                        #and wait for a little while so that it can be set again
-        return int(self._visainstrument.ask('LIAS? 1'))==1
+        return int(self.__ask('LIAS? 1'))==1
 
     def do_get_output_overload(self, update=True):
         '''
@@ -682,6 +917,6 @@ class SR830(Instrument):
         Set update to True for querying present overload, False for querying past events
         '''
         if update:
-            self._visainstrument.ask('LIAS? 2')     #for realtime detection we clear the bit by reading it
+            self.__ask('LIAS? 2')     #for realtime detection we clear the bit by reading it
             time.sleep(0.02)                        #and wait for a little while so that it can be set again
-        return int(self._visainstrument.ask('LIAS? 2'))==1
+        return int(self.__ask('LIAS? 2'))==1

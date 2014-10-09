@@ -105,15 +105,18 @@ class Scripts():
         return self._cache.keys()
 
     def _scan_dir(self, dirname):
-        entries = os.listdir(dirname)
-        for entry in entries:
-            if (len(entry) > 0 and entry[0] == '.') or not entry.endswith('.py'):
-                continue
-            joined = os.path.join(dirname, entry)
-            if os.path.isdir(joined):
-                self._scan_dir(joined)
-            else:
-                self.get(entry)
+        try:
+            entries = os.listdir(dirname)
+            for entry in entries:
+                if (len(entry) > 0 and entry[0] == '.') or not entry.endswith('.py'):
+                    continue
+                joined = os.path.join(dirname, entry)
+                if os.path.isdir(joined):
+                    self._scan_dir(joined)
+                else:
+                    self.get(entry)
+        except WindowsError as e:
+            print e
 
     def scan(self):
         for dirname in self._dirs:

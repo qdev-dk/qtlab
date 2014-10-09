@@ -98,6 +98,8 @@ class Instrument(SharedGObject):
         self._options = kwargs
         if 'tags' not in self._options:
             self._options['tags'] = []
+        if 'default_cache_time' not in self._options:
+            self._options['default_cache_time'] = 0.
 
         self._parameters = {}
         self._parameter_groups = {}
@@ -255,6 +257,9 @@ class Instrument(SharedGObject):
                     to watch. If any of them changes, execute a get for this
                     parameter. Useful for a parameter that depends on one
                     (or more) other parameters.
+                cache_time: the time during which get_<parameter> will perform
+                    a SOFTGET, i.e. returns the value last passed to
+                    set_<parameter>. Set to zero to disable.
 
         Output: None
         '''
@@ -274,6 +279,9 @@ class Instrument(SharedGObject):
             options['type'] = types.NoneType
         if 'tags' not in options:
             options['tags'] = []
+        if 'cache_time' not in options:
+            options['cache_time'] = self._options['default_cache_time']
+        options['last_physical_access_time'] = 0.  # unix time stamp
 
         # If defining channels call add_parameter for each channel
         if 'channels' in options:
@@ -472,7 +480,7 @@ class Instrument(SharedGObject):
         Ouput:  None
         '''
         if name not in self._parameters:
-            print 'Parameter %s not defined' % name
+            logging.warn('Parameter %s not defined' % name)
             return None
 
         for key, val in kwargs.iteritems():
@@ -683,14 +691,15 @@ class Instrument(SharedGObject):
         try:
             p = self._parameters[name]
         except:
-            print 'Could not retrieve options for parameter %s' % name
+            logging.warn('Could not retrieve options for parameter %s' % name)
             return None
 
         if 'channel' in p and 'channel' not in kwargs:
             kwargs['channel'] = p['channel']
 
+        current_time = time.time()
         flags = p['flags']
-        if not query or flags & 8: #self.FLAG_SOFTGET:
+        if not query or flags & 8 or (current_time - p['last_physical_access_time']) < p['cache_time']: #self.FLAG_SOFTGET:
             if 'value' in p:
                 if p['type'] == np.ndarray:
                     return np.array(p['value'])
@@ -702,7 +711,7 @@ class Instrument(SharedGObject):
 
         # Check this here; getting of cached values should work
         if not flags & 1: #Instrument.FLAG_GET:
-            print 'Instrument does not support getting of %s' % name
+            logging.warn('Instrument does not support getting of %s' % name)
             return None
 
         if 'base_name' in p:
@@ -730,6 +739,7 @@ class Instrument(SharedGObject):
                 logging.warning('Unable to cast value "%s" to %s', value, p['type'])
 
         p['value'] = value
+        p['last_physical_access_time'] = current_time
         return value
 
     def get(self, name, query=True, fast=False, **kwargs):
@@ -894,7 +904,7 @@ class Instrument(SharedGObject):
             return None
 
         if not p['flags'] & Instrument.FLAG_SET:
-            print 'Instrument does not support setting of %s' % name
+            logging.warn('Instrument does not support setting of %s' % name)
             return None
 
         if 'channel' in p and 'channel' not in kwargs:
@@ -925,11 +935,11 @@ class Instrument(SharedGObject):
                 return None
 
         if 'minval' in p and value < p['minval']:
-            print 'Trying to set too small value: %s' % value
+            logging.warn('Trying to set "%s" too small: %s' % (name, value))
             return None
 
         if 'maxval' in p and value > p['maxval']:
-            print 'Trying to set too large value: %s' % value
+            logging.warn('Trying to set "%s" too large: %s' % (name, value))
             return None
 
         if 'base_name' in p:
@@ -941,7 +951,7 @@ class Instrument(SharedGObject):
         if 'maxstep' in p and p['maxstep'] is not None:
             curval = p['value']
             if curval is None:
-                logging.warning('Current value not available, ignoring maxstep')
+                logging.warning('Current "%s" value not available, ignoring maxstep', name)
                 curval = value + 0.01 * p['maxstep']
 
             delta = curval - value
@@ -979,6 +989,7 @@ class Instrument(SharedGObject):
             config.save()
 
         p['value'] = value
+        p['last_physical_access_time'] = time.time()
         return value
 
     def set(self, name, value=None, fast=False, **kwargs):
@@ -1001,8 +1012,7 @@ class Instrument(SharedGObject):
         '''
 
         if self._locked:
-            logging.warning('Trying to set value of locked instrument (%s)',
-                    self.get_name())
+            logging.warning('Trying to set "%s" of locked instrument (%s)', name, self.get_name())
             return False
 
         if Instrument.USE_ACCESS_LOCK:
@@ -1048,6 +1058,11 @@ class Instrument(SharedGObject):
             return None
 
         p['value'] = value
+        
+        if p['flags'] & self.FLAG_PERSIST:
+          config.set('persist_%s_%s' % (self._name, name), value)
+          config.save()
+
         self._queue_changed({name: value})
 
     def get_argspec_dict(self, a):

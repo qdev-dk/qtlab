@@ -7,3 +7,8 @@ tmp
 3rd_party
 *.lock
 *.cfg
+qtlibs*.log
+3rd_party
+gui_client.cfg
+qtlab.lock
+qtlibs.cfg
