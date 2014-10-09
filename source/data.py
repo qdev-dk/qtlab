@@ -338,9 +338,9 @@ class Data(SharedGObject):
         as a dimension name.
         '''
         if isinstance(index, basestring):
-            return self._data[:,self.get_dimension_index(index)]
+            return self.get_data()[:,self.get_dimension_index(index)]
         else:
-            return self._data[index]
+            return self.get_data()[index]
 
     def __setitem__(self, index, val):
         self._data[index] = val
