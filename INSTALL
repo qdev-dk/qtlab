@@ -15,6 +15,38 @@ qtlab.bat
 linux:
 ./qtlab
 
+
+############
+QUICK START
+############
+
+The fastest way to get ready for QTLab is the following steps:
+
+1) Install Anaconda python (32-bit):
+http://continuum.io/downloads continuum.io
+
+2) Install pygtk all-in-one
+http://pygtk.org/downloads.html
+
+3) Install NI-VISA
+https://pyvisa.readthedocs.org/en/1.6/getting_nivisa.html#getting-nivisa
+
+4) Install pip (Optional)
+https://pip.pypa.io/en/latest/installing.html
+
+5) Install pyvisa
+https://pyvisa.readthedocs.org/en/1.6/getting.html
+(or run 'pip install -U pyvisa' in terminal)
+
+That was all the python routines needed, now for the the QTLab files:
+
+1a) Download GNUplot
+http://gnuplot.info/download.html
+
+1b) Download console2
+http://sourceforge.net/projects/console/files/?source=navbar
+and place them in a new folder called 3rd_party in the qtlab folder.
+
 ############
 DEPENDENCIES
 ############
