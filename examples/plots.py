@@ -42,7 +42,28 @@ logging.info('Output of the plot is stored in: %s', p.get_output_dir())
 
 
 
-# You can also plot data objects directly
+# You can also plot Data objects directly.
+
+# Note about plotting:
+#
+# You can produce "live" plots of data with syntax like this:
+# p = plot.get_plot('test measurement live plot',
+#                   replace_if_exists=True)
+# p.add_data(data) # where data is a qt.Data object
+# p.set_default_labels()
+#
+# In general however, it's better to plot your data in
+# an entirely separate process from the main qtlab instance
+# controlling your measurement hardware.
+#
+# This allows you to change your plotting routine while
+# your measurement is still running. It also makes sure
+# that your measurement process doesn't get killed by
+# the operating system if you accidentally plot enormous
+# datasets that hog too much memory.
+#
+# See plotting examples and the "dataview" example.
+
 d = qt.Data('test data')
 d.add_coordinate('frequency', units='s')
 d.add_value('amplitude', units='V')
