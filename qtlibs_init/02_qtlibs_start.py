@@ -51,7 +51,8 @@ else:
     logging.info('psyco acceleration not enabled')
 
 import qt
-from qt import plot, plot3, Plot2D, Plot3D, Data
+from qt import Data
+import plot
 
 from numpy import *
 import numpy as np
