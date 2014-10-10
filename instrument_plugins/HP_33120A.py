@@ -16,7 +16,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 from instrument import Instrument
-import visa
+import qtvisa as visa
 import types
 import logging
 from time import sleep
@@ -64,7 +64,7 @@ class HP_33120A(Instrument):
         self.add_parameter('amplitude',
                 type=types.FloatType,
                 flags=Instrument.FLAG_GETSET,
-                minval=-10, maxval=10,
+                minval=10e-3, maxval=10,
                 units='V')
         self.add_parameter('offset',
                 type=types.FloatType,
