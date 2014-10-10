@@ -34,12 +34,12 @@ def set_visa(name):
         raise ValueError('Unknown VISA provider: %s', name)
 
     try:
-        if name == "pyvisa":
-            from pyvisa import visa as module
-        else:
-            module = __import__(name)
-        global instrument
-        instrument = module.instrument
+#        if name == "pyvisa":
+#            from pyvisa import visa as module
+#        else:
+        module = __import__(name)
+#        global instrument
+#        instrument = module.instrument
     except:
         logging.warning('Unable to load visa driver %s', name)
 

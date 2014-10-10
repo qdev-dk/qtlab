@@ -56,7 +56,8 @@ def show_start_help():
         ip.magic('Exit')
 
 def do_start():
-    basedir = os.path.split(os.path.dirname(sys.argv[0]))[0]
+    #basedir = os.path.split(os.path.dirname(sys.argv[0]))[0]
+    basedir = os.path.split(os.path.dirname(os.path.realpath(__file__)))[0]
     sys.path.append(os.path.abspath(os.path.join(basedir, 'source')))
 
     ignorelist = []

@@ -39,8 +39,9 @@ objsh.root.set_instance_name(iname)
 print 'Setting instance name to %s' % iname
 from lib.network import share_gtk
 share_gtk.start_server('localhost', port=_cfg.get('port', objsh.PORT))
-for _ipaddr in _cfg['allowed_ips']:
-    objsh.SharedObject.server.add_allowed_ip(_ipaddr)
+if _cfg['allowed_ips'] is not None:
+    for _ipaddr in _cfg['allowed_ips']:
+        objsh.SharedObject.server.add_allowed_ip(_ipaddr)
 objsh.PythonInterpreter('python_server', globals())
 if _cfg['instrument_server']:
     from lib.network import remote_instrument
@@ -71,8 +72,8 @@ if qt.config.get('startgui', True):
 temp.File.set_temp_dir(qt.config['tempdir'])
 
 # change startdir if commandline option is given
-if __startdir__ is not None:
-    qt.config['startdir'] = __startdir__
+#if __startdir__ is not None:
+#    qt.config['startdir'] = __startdir__
 # FIXME: use of __startdir__ is spread over multiple scripts:
 # 1) source/qtlab_client_shell.py
 # 2) init/02_qtlab_start.py
