@@ -40,12 +40,20 @@ https://pyvisa.readthedocs.org/en/1.6/getting.html
 
 That was all the python routines needed, now for the the QTLab files:
 
-1a) Download GNUplot
+a) Download GNUplot
 http://gnuplot.info/download.html
 
-1b) Download console2
+b) Download console2
 http://sourceforge.net/projects/console/files/?source=navbar
 and place them in a new folder called 3rd_party in the qtlab folder.
+
+Now you should be able to run qtlab.bat which starts qtlab.
+
+Final note, you have a shortcut to qtlab on the taskbar with the following steps:
+1) Create a shortcut for qtlab
+2) Go the properties of the shortcut and change the target to
+   cmd.exe /C "path-to-your-qtlab.bat"
+3) Now you can drag it to the taskbar
 
 ############
 DEPENDENCIES
