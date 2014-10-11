@@ -1,3 +1,4 @@
+# Author: Pierre Barthelemy <P.J.C.Barthelemy@tudelft.nl>
 import qt
 import inspect
 from instrument import Instrument

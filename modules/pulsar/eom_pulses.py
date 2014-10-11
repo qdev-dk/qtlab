@@ -1,3 +1,7 @@
+# Authors:
+# Bas Hensen <B.J.Hensen@tudelft.nl>
+# Gijs de Lange - TNW <G.deLange@tudelft.nl>
+# Wolfgang Pfaff <wolfgangpfff@googlemail.com>
 import numpy as np
 import pulse
 import pulsar

@@ -1,3 +1,4 @@
+# Author: Pierre Barthelemy <P.J.C.Barthelemy@tudelft.nl>
 # Make sure the modules folder is in your sys.path (should be done in userconfig.py)
 import measurement_classes
 reload(measurement_classes)

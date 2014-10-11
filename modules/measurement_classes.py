@@ -1,3 +1,4 @@
+# Author: Pierre Barthelemy <P.J.C.Barthelemy@tudelft.nl>
 #ToDo global relative gates
 from numpy import pi, random, arange, size, mod, zeros, array, diff, exp, roll, argmax, argmin,nonzero, sign, polyfit,sign,linspace,correlate,mean
 from numpy import abs,concatenate,int,mat,linalg,convolve,reshape,round_,sqrt,append,inf,nan,exp,round
