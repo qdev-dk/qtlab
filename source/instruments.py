@@ -288,6 +288,7 @@ class Instruments(SharedGObject):
         if module is None:
             return self._create_invalid_ins(name, instype, **kwargs)
         reload(module)
+        logging.info('Added instrument: %s',instype)
         insclass = getattr(module, instype, None)
         if insclass is None:
             logging.error('Driver does not contain instrument class')
