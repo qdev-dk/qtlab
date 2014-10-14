@@ -47,8 +47,6 @@ class HP_33210A(Instrument):
         Output:
             None
         '''
-        
-        logging.debug(__name__ + ' : Initializing instrument')
         Instrument.__init__(self, name, tags=['physical'])
 
         self._address = address
