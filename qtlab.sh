@@ -1,3 +1,3 @@
 #!/bin/sh
-
-ipython -i qtlab_macstart.py
+# from terminal just run './qtlab.sh' to start :)
+ipython -i --gui=gtk qtlab_macstart.py
