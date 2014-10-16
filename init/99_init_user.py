@@ -31,5 +31,5 @@ if qt.config['scriptdirs'] is not None:
 # Start IPython command logging if requested
 if qt.config['ipython_logfile'] not in (None, ''):
     _ip = get_ipython_backward_compatible()
-    _ip.IP.logger.logstart(logfname=qt.config['ipython_logfile'], logmode='append')
+    _ip.logger.logstart(logfname=qt.config['ipython_logfile'], logmode='append')
 
