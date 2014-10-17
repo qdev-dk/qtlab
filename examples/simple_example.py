@@ -1,5 +1,6 @@
 import numpy as np
 import qt
+from plot import plot
 
 d = qt.Data(name='test_data')
 d.add_coordinate('X')
