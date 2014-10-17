@@ -1,5 +1,6 @@
 # This file contains user-specific settings for qtlab.
 # It is run as a regular python script.
+import os, sys
 
 # Do not change the following line unless you know what you are doing
 config.remove([
@@ -25,7 +26,9 @@ config['allowed_ips'] = (
 config['instrument_server'] = False
 
 ## This sets a default location for data-storage
-#config['datadir'] = 'd:/data'
+# If you want to store your data relative the qtlab folder Use s
+# config['datadir'] = os.path.join(config['execdir'], 'YOUR-RELATIVE-PATH-HERE')
+config['datadir'] = 'C:\YOUR-DATA-DIRECTORY-PATH'
 
 ## This sets a default directory for qtlab to start in
 #config['startdir'] = 'd:/scripts'
@@ -50,9 +53,8 @@ config['scriptdirs'] = [
 
 ## For adding additional folders to the 'systm path'
 ## so python can find your modules
-import sys
-sys.path.append('modules')
-#sys.path.append('d:/folder2')
+sys.path.append(os.path.join(config['execdir'], 'modules'))
+
 
 # Whether to start the GUI automatically
 config['startgui'] = True
