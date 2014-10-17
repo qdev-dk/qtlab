@@ -27,7 +27,7 @@ class Agilent_34410A(Instrument):
 
     Usage:
     Initialize with
-    <name> = instruments.create('<name>', 'Agilent_34410A', address='<GBIP address>, reset=<bool>')
+    <name> = qt.instruments.create('<name>', 'Agilent_34410A', address='<GBIP address>', reset=<bool>)
     '''
 
     def __init__(self, name, address, reset=False):
