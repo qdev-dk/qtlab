@@ -62,7 +62,7 @@ class HP_33210A(Instrument):
         self.add_parameter('amplitude',
                 type=types.FloatType,
                 flags=Instrument.FLAG_GETSET,
-                minval=-10, maxval=10,
+                minval=10e-3, maxval=10,
                 units='V')
         self.add_parameter('offset',
                 type=types.FloatType,
