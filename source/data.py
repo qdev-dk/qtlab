@@ -45,6 +45,7 @@ if in_qtlab:
 class DateTimeGenerator:
     '''
     Class to generate filenames / directories based on the date and time.
+    Date (YYYYMMDD) -> Time (HHMMSS) -> data
     '''
 
     def __init__(self):
@@ -92,6 +93,7 @@ class DateTimeGenerator:
 class IncrementalGenerator:
     '''
     Class to generate filenames that are incrementally numbered.
+    No folder system
     '''
 
     def __init__(self, basename, start=1):
@@ -133,6 +135,122 @@ class IncrementalGenerator:
             fn = self._fn(self._counter)
         self._counter += 1
         return fn
+
+
+class DateTimeIncrementalGenerator:
+    '''
+    Class to generate filenames that are incrementally numbered.
+
+    With datesubdir = true, and timesubdir = true
+    Date (YYYYMMDD) -> Time and ID (HHMMSS_#ID) -> data
+
+    With datesubdir = true, and timesubdir = false
+    Date (YYYYMMDD) -> ID (#ID) -> data
+
+    With datesubdir = false
+    ID (#ID) -> data
+
+
+    Input:
+        datadir (string): base directory
+        start (number): Initial number to count from
+        name (string): optional name of measurement
+        datesubdir (bool): whether to create a subdirectory for the date
+        timesubdir (bool): whether to create a subdirectory for the time
+
+    Output:
+        The directory to place the new file in
+    '''
+
+    def __init__(self, datadir, start=1, name=None, datesubdir=True, timesubdir=True):
+        # Store settings given during init
+        self._datadir = datadir
+        self._name = name
+        self._datesubdir = datesubdir
+        self._timesubdir = timesubdir
+        self._counter = start
+
+        # Update counter
+        self._counter = self._check_last_number(self._counter)
+
+        # Add to log:
+        logging.info('DateTimeIncrementalGenerator: starting counter at %d',
+                self._counter)
+
+
+    def _create_data_path(self,idNum):
+        '''
+        Create and return a new data directory based on settings.
+        '''
+
+        # Set basepath
+        path = self._datadir
+
+
+        # Get local time
+        ts = time.localtime()
+
+        # Set date sub-directory if given
+        if self._datesubdir:
+            path = os.path.join(path, time.strftime('%Y%m%d', ts))
+            
+            # Set time sub-directory if given    
+            if self._timesubdir:
+                tsd = time.strftime('%H%M%S', ts)
+
+                # Add incremented ID
+                tsd += '_#' + str(idNum)
+
+                # Add name if given
+                if self._name is not None:
+                    tsd += '_' + self._name
+
+                # Create final patth
+                path = os.path.join(path, tsd)
+
+
+            else:
+                path = os.path.join(path, '#'+str(idNum))
+        else:
+            path = os.path.join(path, '#'+str(idNum))
+
+        
+
+        # Retun final path
+        return path
+
+
+
+    def _check_last_number(self, start=1):
+        if not os.path.exists(self._create_data_path(1)):
+            return 1
+
+        curn = start
+        stepsize = 1
+        while os.path.exists(self._create_data_path(curn)):
+            curn += stepsize
+            stepsize *= 2
+
+        dir = -1
+        stepsize /= 2
+        while stepsize != 0:
+            if os.path.exists(self._create_data_path(curn)):
+                stepsize /= 2
+                curn += stepsize
+            else:
+                curn -= stepsize
+
+        return curn + 1
+
+    def new_filename(self, data_obj):
+        fn = self._create_data_path(self._counter)
+        while os.path.exists(fn):
+            logging.warning('File "%s" exists, incrementing counter', fn)
+            self._counter += 1
+            fn = self._create_data_path(self._counter)
+        self._counter += 1
+        return fn
+
 
 class _DataList(namedlist.NamedList):
     def __init__(self, time_name=False):
