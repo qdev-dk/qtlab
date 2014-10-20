@@ -100,15 +100,15 @@ class SquarePulse(Pulse):
         self.channel = channel # this is just for convenience, internally
         self.channels.append(channel) # this is the part the sequencer element 
                                       # wants to communicate with
-        self.amplitude = kw.pop('amplitude', 0)
-        self.length = kw.pop('length', 0)
+        self.amplitude  = kw.pop('amplitude', 0)
+        self.length     = kw.pop('length', 0)
 
     def __call__(self, **kw):
-        self.amplitude = kw.pop('amplitude', self.amplitude)
-        self.length = kw.pop('length', self.length)
-        self.channel = kw.pop('channel', self.channel)
+        self.amplitude  = kw.pop('amplitude', self.amplitude)
+        self.length     = kw.pop('length', self.length)
+        self.channel    = kw.pop('channel', self.channel)
 
-        self.channels = []
+        self.channels   = []
         self.channels.append(self.channel)
 
         return self
@@ -121,19 +121,19 @@ class SinePulse(Pulse):
     def __init__(self, channel, name='sine pulse', **kw):
         Pulse.__init__(self, name)
         
-        self.channel = channel # this is just for convenience, internally
-        self.channels.append(channel) # this is the part the sequencer element
-                                      # wants to communicate with
-        self.frequency = kw.pop('frequency', 1e6)
-        self.amplitude = kw.pop('amplitude', 0.)
-        self.length = kw.pop('length', 0.)
-        self.phase = kw.pop('phase', 0.)
+        self.channel = channel          # this is just for convenience, internally
+        self.channels.append(channel)   # this is the part the sequencer element
+                                        # wants to communicate with
+        self.frequency  = kw.pop('frequency', 1e6)
+        self.amplitude  = kw.pop('amplitude', 0.)
+        self.length     = kw.pop('length', 0.)
+        self.phase      = kw.pop('phase', 0.)
 
     def __call__(self, **kw):
-        self.frequency = kw.pop('frequency', self.frequency)
-        self.amplitude = kw.pop('amplitude', self.amplitude)
-        self.length = kw.pop('length', self.length)
-        self.phase = kw.pop('phase', self.phase)
+        self.frequency  = kw.pop('frequency', self.frequency)
+        self.amplitude  = kw.pop('amplitude', self.amplitude)
+        self.length     = kw.pop('length', self.length)
+        self.phase      = kw.pop('phase', self.phase)
 
         return self
 

@@ -28,7 +28,8 @@ class Pulsar:
     AWG = None
     AWG_type = 'regular' # other option at this point is 'opt09'
     clock = 1e9
-    channel_ids = ['ch1', 'ch1_marker1', 'ch1_marker2',
+    channel_ids = [
+        'ch1', 'ch1_marker1', 'ch1_marker2',
         'ch2', 'ch2_marker1', 'ch2_marker2',
         'ch3', 'ch3_marker1', 'ch3_marker2',
         'ch3', 'ch3_marker1', 'ch3_marker2' ]
