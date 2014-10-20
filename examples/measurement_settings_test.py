@@ -1,21 +1,26 @@
 # Author: Pierre Barthelemy <P.J.C.Barthelemy@tudelft.nl>
+# Modification to runnable example by Rasmus Skytte Eriksen <zrm49@alumni.ku.dk>
+
 # Make sure the modules folder is in your sys.path (should be done in userconfig.py)
 import measurement_classes
 reload(measurement_classes)
 from measurement_classes import *
-settings=qt.instruments.get('measurement_settings')
-settings.set_filename_script(inspect.getfile(inspect.currentframe()))
+settings=qt.instruments.get('Measurement-Settings')
 
 #Runnable Example
 #Creating Value Instruments:
-#keithley1={'instrument':'keithley','parameter':'readlastval','multiplication_factor':1,'description':'QPC current','units':'mV'}
-#settings.set_values([keithley1,keithley2])
-#Creating Coordinates
-#settings.set_coordinates_x([('gates','LS',10,20)])
-#settings.set_coordinates_y([('gates','LP',30,50)])
+#dmm1={'instrument':'DMM1','parameter':'readval','multiplication_factor':1,'description':'DMM voltage','units':'V'}
+#settings.set_values([dmm1])
+
+#Creating Coordinates to sweep over
+#settings.set_coordinates_x([('HP33210A','amplitude',10e-2,10e-1)])
 #settings.set_npoints_x(10)
-#settings.set_npoints_y(5)
-#launch3Dmeasurement('runned_example')
+
+# Start the measurement
+#launch2Dmeasurement('runned_example')
+
+
+
 
 
 #Void Example for using init_scan and init_sweep
@@ -40,7 +45,5 @@ settings.set_coordinates_x([])
 settings.set_coordinates_y([])
 #settings.set_coordinates_y([('gates','LP',30,50,'log')])
 
-settings.set_npoints_x(10)
 settings.set_npoints_y(5)
 launch3Dmeasurement('example_init')
-

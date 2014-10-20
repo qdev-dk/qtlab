@@ -18,7 +18,7 @@ iterator2=0
 import qt
 reload(qt)
 
-settings=qt.instruments.get('measurement_settings')
+settings=qt.instruments.get('Measurement-Settings')
 
 def execute_function_list(function_list):
     for function_tuple in function_list:
@@ -121,16 +121,16 @@ def write_values_to_data(data):
     values=settings.get_values()
     for value in settings.get_values():
         #Get instrument, parameter, and options from the instrument
-        instrument=qt.instruments.get(value[0])
-        options=instrument.get_parameter_options(value[1])
+        instrument=qt.instruments.get(value['instrument'])
+        options=instrument.get_parameter_options(value['parameter'])
         
         
         #Create name for the data.value
-        name=value[0]+'_'+value[1]
+        name=value['instrument']+'_'+value['parameter']
         
         kwargs={}
-        kwargs['instrument']=value[0]
-        kwargs['parameter']=value[1]
+        kwargs['instrument']=value['instrument']
+        kwargs['parameter']=value['parameter']
         kwargs['type']='value'
         kwargs['units']=options.get('units')
         data.add_value(name,**kwargs)
@@ -187,7 +187,7 @@ def launch2Dmeasurement(measurement_name):
     Performs a 2D measurement: y=f(x)
     Input: measurement_name <string>: name of the measurement
     '''
-    initialize_instruments()
+    #initialize_instruments()
     #################################################################
     #Qt.Data File Creation
     #################################################################
@@ -222,7 +222,7 @@ def launch2Dmeasurement(measurement_name):
         execute_function_list_point
         # read out all the values
         for value in settings.get_values():
-            y=getdevicevalue(value[0],value[1])
+            y=getdevicevalue(value['instrument'],value['parameter'])
             result.append(y)
         # save the data point
         data.add_data_point(*result)
@@ -296,7 +296,7 @@ def launch3Dmeasurement(measurement_name):
             
             # read out all the values
             for index,value in enumerate(settings.get_values()):
-                y=getdevicevalue(value[0],value[1])
+                y=getdevicevalue(value['instrument'],value['parameter'])
                 data_mem[i,index+len(settings.get_coordinates_y())+len(settings.get_coordinates_x())]=y
         
         #Indicate Remaining Time
@@ -453,7 +453,7 @@ def measure_vs_time(measurement_name,measuretime):
         qt.msleep(waittime)
         # read out all the y values
         for value in settings.get_values():
-            y=getdevicevalue(values[0],value[1])
+            y=getdevicevalue(values[0],value['parameter'])
             result.append(y)
         # save the data point
         data.add_data_point(*result)
