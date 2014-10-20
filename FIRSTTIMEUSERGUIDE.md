@@ -5,7 +5,7 @@ Contents
 --------
 1. Instalation
 
-2: First time configurations
+2. First time configurations
 
 
 1) Instalation
