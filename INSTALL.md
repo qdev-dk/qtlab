@@ -30,10 +30,10 @@ URL: [pip.pypa.io](https://pip.pypa.io/en/latest/installing.html)
 That was all the python routines needed, now for the the QTLab files:
 
 #####a) Download GNUplot
-http://gnuplot.info/download.html
+URL [gnuplot.info](http://gnuplot.info/download.html)
 
 #####b) Download console2
-http://sourceforge.net/projects/console/files/?source=navbar
+URL [sourceforge.net](http://sourceforge.net/projects/console/files/?source=navbar)
 and place them in a new folder called 3rd_party in the qtlab folder.
 
 Now you should be able to run qtlab.bat which starts qtlab.
@@ -44,23 +44,27 @@ Final note, you can have a shortcut to qtlab on the taskbar with the following s
    cmd.exe /C "path-to-your-qtlab.bat"
 3) Now you can drag it to the taskbar
 
-############
 DEPENDENCIES
-############
+------------
 
 The dependencies are split into two groups:
 
-A) python and python libraries.
-    These always need to be installed separately by the user on the computer where QTlab will be running.
+#####A) Python and python libraries.
 
-B) other programs.
-    These programs generally do not need to be installed, but just have to 'be there'. Adding their locations to the PATH will make sure that QTLab can find the necessary files. This you can do any way you like, below we will describe one way as an example.
+These always need to be installed separately by the user on the computer where QTlab will be running.
 
-=group A=
+#####B) Other programs.
+
+These programs generally do not need to be installed, but just have to 'be there'. Adding their locations to the PATH will make sure that QTLab can find the necessary files. This you can do any way you like, below we will describe one way as an example.
+
+####Group A
 
 1) python (2.6.x or 2.7.x)
 
-    NOTE: python is in transition to an new and incompatible version 3.x. Python 2.7 is the last of the 2.x series and will likely be supported for a very long time. It contains many features that should make the transition smooth (if we will ever make it). We will stick with 2.7.x until all the dependencies have switched to 3.x.
+    NOTE: python is in transition to an new and incompatible version 3.x. Python 2.7 is the last of the
+    2.x series and will likely be supported for a very long time. It contains many features that should
+    make the transition smooth (if we will ever make it). We will stick with 2.7.x until all the
+    dependencies have switched to 3.x.
     URL: python.org
 
 2a) numpy (>=1.4.0)
@@ -99,7 +103,7 @@ B) other programs.
     library for communication with GPIB/USB/SERIAL instruments
     URL: pyvisa.sourceforge.net/
 
-=Group B=
+####Group B
 
 1) gnuplot (>=4.3)
 
