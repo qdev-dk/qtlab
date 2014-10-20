@@ -176,7 +176,7 @@ class DataStorageGenerator:
 
         # Update counter
         if self._incremental:
-            self._counter = self._check_last_number(self._counter)
+            self._counter = self._check_last_number()
 
             # Add to log:
             logging.info('DataStorageGenerator: starting counter at %d',
@@ -234,31 +234,34 @@ class DataStorageGenerator:
 
 
 
-    def _check_last_number(self, start=1):
+    def _check_last_number(self):
         '''
         Gets the last ID number created
         TODO: Update to work wit hnew naming scheme
         '''
-        #if not os.path.exists(self._create_data_path(1)):
-        #    return 1
+        # Set initial highest ID number
+        IDnum = 1
 
-        #curn = start
-        #stepsize = 1
-        #while os.path.exists(self._create_data_path(curn)):
-        #    curn += stepsize
-        #    stepsize *= 2
 
-        #dir = -1
-        #stepsize /= 2
-        #while stepsize != 0:
-        #    if os.path.exists(self._create_data_path(curn)):
-        #        stepsize /= 2
-        #        curn += stepsize
-        #    else:
-        #        curn -= stepsize
+        # Use os.walk() to find the last ID number created using regular expressions
+        import re
+        for root, dirs, files in os.walk(self._datadir, topdown=False):
+            for name in files:
+                ID = re.search('#[0-9]+', name)
+                if ID != None:
+                    ID = ID.group(0)
+                    ID = int(ID[1:len(ID)])
+                    if ID > IDnum:
+                        IDnum = ID
+            for name in dirs:
+                ID = re.search('#[0-9]+', name)
+                if ID != None:
+                    ID = ID.group(0)
+                    ID = int(ID[1:len(ID)])
+                    if ID > IDnum:
+                        IDnum = ID
 
-        #return curn + 1
-        return 1
+        return IDnum
 
     def new_filename(self, data_obj):
         '''Return a new filename, based on name and timestamp.'''
@@ -266,7 +269,7 @@ class DataStorageGenerator:
         # Get local time
         ts = time.localtime()
 
-        directory = self._create_data_path(ts,self._counter,name=data_obj._name)
+        directory = self._create_data_path(ts,self._counter+1,name=data_obj._name)
 
         tstr = time.strftime('%H%M%S', ts)
 
@@ -277,9 +280,9 @@ class DataStorageGenerator:
 
         if self._incremental:
             if filename == '':
-                filename += '#%d' % self._counter
+                filename += '#%d' % (self._counter + 1)
             else:
-                filename += '_#%d' % self._counter
+                filename += '_#%d' % (self._counter + 1)
 
 
         if data_obj._name is not None:
@@ -291,7 +294,7 @@ class DataStorageGenerator:
 
         # Check that filename has been set
         if filename == '':
-            filename = '#%d' % self._counter
+            filename = '#%d' % (self._counter + 1)
 
 
         # Add extension
