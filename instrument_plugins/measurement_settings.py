@@ -435,7 +435,7 @@ class measurement_settings(Instrument):
         for function in function_list:
             self._end_sweep.append(function)
             
-    def do_set_func_list_point(self,function_list)
+    def do_set_func_list_point(self,function_list):
         '''
         Sets the list of functions to be runned at the beginning of each sweep (line in 3D measurement / 2D measurement)
         Input: function_list: <List of <functions>>
