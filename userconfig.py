@@ -43,7 +43,6 @@ config['exitscript'] = []       #e.g. ['closescript1.py', 'closescript2.py']
 # global namespace as functions.
 config['scriptdirs'] = [
         'examples/scripts',
-#        'd:/scripts',
 ]
 
 ## This sets a user instrument directory
@@ -54,6 +53,7 @@ config['scriptdirs'] = [
 ## For adding additional folders to the 'systm path'
 ## so python can find your modules
 sys.path.append(os.path.join(config['execdir'], 'modules'))
+sys.path.append(os.path.join(config['execdir'], 'examples'))
 
 
 # Whether to start the GUI automatically
@@ -66,3 +66,12 @@ config['startgui'] = True
 
 # Enter a filename here to log all IPython commands
 config['ipython_logfile'] = ''      #e.g. 'command.log'
+
+## Data naming
+# By defult the data is stored in the "datadir" folder in a subfolder with
+# date of the measurement, and herein a subfolder with timestamp and name
+# To set an auto-increment filename generator use the following:
+import data, qt
+gen = data.DataStorageGenerator(config['datadir'],datesubdir=True, timesubdir=True, incremental=True)
+qt.Data.set_filename_generator(gen)
+# For more data name generators, check out data.py
