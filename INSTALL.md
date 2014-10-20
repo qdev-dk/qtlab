@@ -23,17 +23,17 @@ URL:  [pyvisa.readthedocs.org](https://pyvisa.readthedocs.org/en/1.6/getting_niv
 URL: [pip.pypa.io](https://pip.pypa.io/en/latest/installing.html)
 
 #####5) Install pyvisa
-[pyvisa.readthedocs.org](https://pyvisa.readthedocs.org/en/1.6/getting.html)
+URL: [pyvisa.readthedocs.org](https://pyvisa.readthedocs.org/en/1.6/getting.html)
 
 (or run 'pip install -U pyvisa' in terminal)
 
 That was all the python routines needed, now for the the QTLab files:
 
 #####a) Download GNUplot
-URL [gnuplot.info](http://gnuplot.info/download.html)
+URL: [gnuplot.info](http://gnuplot.info/download.html)
 
 #####b) Download console2
-URL [sourceforge.net](http://sourceforge.net/projects/console/files/?source=navbar)
+URL: [sourceforge.net](http://sourceforge.net/projects/console/files/?source=navbar)
 and place them in a new folder called 3rd_party in the qtlab folder.
 
 Now you should be able to run qtlab.bat which starts qtlab.
@@ -134,8 +134,8 @@ b) Both gnuplot and Console2 don't have an installer. They are just copied to th
 
 c) Make sure that QTlab can find the executables. In stead of changing the PATH permanently (in system => advanced => system_variables), we prefer to add them on the commandline. Adjust the qtlab.bat file to correspond to the location of your '3rd_party' folder. If you did it exactly as recommended here, you can just uncomment the four 'SET' lines. This will add the following variables to the PATH:
 
-<path_to_gnuplot_folder>\bin
-<path_to_console2_folder>\
+    <path_to_gnuplot_folder>\bin
+    <path_to_console2_folder>\
 
 It is important to add them to the beginning of the list (of the PATH variable), so if any other versions exist, ours will be found before.
 
