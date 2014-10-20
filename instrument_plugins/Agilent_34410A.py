@@ -80,10 +80,12 @@ class Agilent_34410A(Instrument):
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='', minval=1, maxval=50000, type=types.IntType)
         self.add_parameter('trigger_delay',
             flags=Instrument.FLAG_GETSET|Instrument.FLAG_GET_AFTER_SET, units='s', minval=0., maxval=3600., type=types.FloatType)
+        self.add_parameter('readval',
+            flags=Instrument.FLAG_GET, units='V', type=types.FloatType)
 
         self.add_function('reset')
-        self.add_function ('get_all')
-        self.add_function('get_reading')
+        self.add_function('get_all')
+        self.add_function('read')
         self.add_function('measurement_init')
         self.add_function('measurement_trigger')
         self.add_function('measurement_fetch')
@@ -108,7 +110,7 @@ class Agilent_34410A(Instrument):
         self._visainstrument.write('*RST')
         self.get_all()
 
-    def get_reading(self):
+    def read(self):
         '''
         Get a new reading or readings (essentially, INIT and FETCH).
         Only use this if trigger source is "IMM" or "EXT".
@@ -609,3 +611,10 @@ class Agilent_34410A(Instrument):
           raise Exception('Invalid trigger source "%s". Should be "IMM", "EXT" or "BUS".')
         logging.debug(__name__ + ' : set trigger_source to %s' % val)
         self._visainstrument.write('TRIG:SOUR %s' % val)
+
+    def do_get_readval(self):
+        '''
+        Output:
+            Read value on DMM
+        '''
+        return self.read()
