@@ -1,3 +1,8 @@
+settings 		= qt.instruments.create('Measurement-Settings', 'measurement_settings')
+HP1 			= qt.instruments.create('HP33210A_1',			'HP_33210A', 			address='GPIB::1', 								reset=True)
+DMM1  			= qt.instruments.create('DMM_1', 				'Agilent_34411A', 		address='GPIB::2', 								reset=True)
+
+
 
 ###########
 #
@@ -6,9 +11,6 @@
 ##########
 
 # 		      	  qt.instruments.create('<name>', '<instrument type>', <parameters>)
-#settings 		= qt.instruments.create('Measurement-Settings', 'measurement_settings')
-#HP33210A 		= qt.instruments.create('HP33210A',				'HP_33210A', 			address='GPIB::1', 								reset=True)
-#AG34411A  		= qt.instruments.create('DMM1', 				'Agilent_34411A', 		address='GPIB::2', 								reset=True)
 #AWG 			= qt.instruments.create('TEK5014C', 			'Tektronix_AWG5014C', 	address='TCPIP::172.20.2.127::3000::SOCKET', 	reset=False)
 #pos 			= qt.instruments.create('pos', 					'dummy_positioner')
 #pwrsens1 		= qt.instruments.create('pwrsens1', 			'Agilent_N1913A', 		address='TCPIP0::10.0.100.101::inst0', 			reset=False)
