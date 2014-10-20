@@ -1,55 +1,44 @@
-################
 INSTALLING QTLAB
-################
+================
 
 QTlab does not have an installer. It just needs to be copied to the local hard drive. It does have numerous dependencies on 3rd party software. For more information on the dependencies see below.
 
-#############
-RUNNING QTLAB
-#############
 
-win32:
-qtlab.bat
-(assumes python installed in c:\python2X, change if needed)
-
-linux:
-./qtlab
-
-
-############
 QUICK START
-############
+------------------
 
 The fastest way to get ready for QTLab is the following steps:
 
-1) Install Anaconda python (32-bit):
-http://continuum.io/downloads continuum.io
+#####1) Install Anaconda python (32-bit):
 
-2) Install pygtk all-in-one
-http://pygtk.org/downloads.html
+URL: [continuum.io](http://continuum.io/downloads)
 
-3) Install NI-VISA
-https://pyvisa.readthedocs.org/en/1.6/getting_nivisa.html#getting-nivisa
+#####2) Install pygtk all-in-one
+URL: [pygtk.org](http://pygtk.org/downloads.html)
 
-4) Install pip (Optional)
-https://pip.pypa.io/en/latest/installing.html
+#####3) Install NI-VISA
+URL:  [pyvisa.readthedocs.org](https://pyvisa.readthedocs.org/en/1.6/getting_nivisa.html#getting-nivisa)
 
-5) Install pyvisa
-https://pyvisa.readthedocs.org/en/1.6/getting.html
+#####4) Install pip (Optional)
+URL: [pip.pypa.io](https://pip.pypa.io/en/latest/installing.html)
+
+#####5) Install pyvisa
+[pyvisa.readthedocs.org](https://pyvisa.readthedocs.org/en/1.6/getting.html)
+
 (or run 'pip install -U pyvisa' in terminal)
 
 That was all the python routines needed, now for the the QTLab files:
 
-a) Download GNUplot
+#####a) Download GNUplot
 http://gnuplot.info/download.html
 
-b) Download console2
+#####b) Download console2
 http://sourceforge.net/projects/console/files/?source=navbar
 and place them in a new folder called 3rd_party in the qtlab folder.
 
 Now you should be able to run qtlab.bat which starts qtlab.
 
-Final note, you have a shortcut to qtlab on the taskbar with the following steps:
+Final note, you can have a shortcut to qtlab on the taskbar with the following steps:
 1) Create a shortcut for qtlab
 2) Go the properties of the shortcut and change the target to
    cmd.exe /C "path-to-your-qtlab.bat"
@@ -147,3 +136,17 @@ c) Make sure that QTlab can find the executables. In stead of changing the PATH 
 It is important to add them to the beginning of the list (of the PATH variable), so if any other versions exist, ours will be found before.
 
 This is it, your done. Happy measuring.
+
+
+RUNNING QTLAB
+----------------------
+
+#### win32:
+
+qtlab.bat
+
+(assumes python installed in c:\python2X, change if needed)
+
+#### linux:
+
+./qtlab
