@@ -2,6 +2,8 @@
 # Arjan Verduijn <a.verduijn@unsw.edu.au>
 # Gabriele de Boo <g.deboo@student.unsw.edu.au>
 #
+# Merlin von Soosten <merlin@nbi.dk> changed to pyvisa==1.6 driver
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -54,7 +56,6 @@ class Keithley_2400(Instrument):
         self._visainstrument = self._visarm.open_resource(self._address)
         self._visainstrument.clear()
         self._visainstrument.query_delay = 20e-3
-        self._visainstrument.ask_delay = 20e-3
         self._visainstrument.read_termination = ''
         self._visainstrument.write_termination = ''
         self._visainstrument.timeout = 2
@@ -225,7 +226,7 @@ class Keithley_2400(Instrument):
             'REAR'
         '''
         logging.debug('Getting the terminal used by %s.' %self.get_name())
-        reply = self._visainstrument.ask(':ROUT:TERM?').rstrip()
+        reply = self._visainstrument.query(':ROUT:TERM?').rstrip()
         if reply == 'FRON': # The source meter responds with 'FRON'
             logging.info('The terminal used by %s is FRONT.' %(self.get_name()))
             return 'FRONT'
@@ -278,7 +279,7 @@ class Keithley_2400(Instrument):
             'memory'
         '''
         logging.debug('Getting source function mode.')
-        reply = self._visainstrument.ask(':SOUR:FUNC:MODE?').rstrip()
+        reply = self._visainstrument.query(':SOUR:FUNC:MODE?').rstrip()
         if reply == 'VOLT':
             logging.info('Source function of %s is voltage.' % self.get_name())
             return 'voltage'
@@ -339,7 +340,7 @@ class Keithley_2400(Instrument):
             'sweep'
         '''
         logging.debug('Getting voltage sourcing mode.')
-        reply = self._visainstrument.ask('SOUR:VOLT:MODE?').rstrip()
+        reply = self._visainstrument.query('SOUR:VOLT:MODE?').rstrip()
         if reply == 'FIX':
             logging.info('Voltage sourcing mode of %s is fixed.' % self.get_name())
             return 'fixed'
@@ -379,7 +380,7 @@ class Keithley_2400(Instrument):
             'sweep'
         '''
         logging.debug('Getting current sourcing mode.')
-        reply = self._visainstrument.ask('SOUR:CURR:MODE?').rstrip()
+        reply = self._visainstrument.query('SOUR:CURR:MODE?').rstrip()
         if reply == 'FIX':
             logging.info('Current sourcing mode of %s is fixed.' % self.get_name())
             return 'fixed'
@@ -491,7 +492,7 @@ class Keithley_2400(Instrument):
         Get current compliance in amps
         '''
         logging.debug('Get current compliance.')
-        return self._visainstrument.ask(':SENS:CURR:PROT:LEV?').rstrip()
+        return self._visainstrument.query(':SENS:CURR:PROT:LEV?').rstrip()
 
     def do_set_voltage_compliance(self, compliance):
         '''
@@ -510,14 +511,14 @@ class Keithley_2400(Instrument):
         Get voltage compliance in volts
         '''
         logging.debug('Get voltage compliance.')
-        return self._visainstrument.ask(':SENS:VOLT:PROT:LEV?').rstrip()
+        return self._visainstrument.query(':SENS:VOLT:PROT:LEV?').rstrip()
 
     def do_get_source_voltage(self):
         '''
         Get the voltage for the voltage source mode.
         '''
         logging.debug('Get source voltage.')
-        return float(self._visainstrument.ask(':SOUR:VOLT:LEV:AMPL?'))
+        return float(self._visainstrument.query(':SOUR:VOLT:LEV:AMPL?'))
 
     def do_set_source_voltage(self, V):
         '''
@@ -535,7 +536,7 @@ class Keithley_2400(Instrument):
         Get the voltage range for the voltage source mode.
         '''
         logging.debug('Getting the source voltage range of %s.' % self.get_name())
-        return self._visainstrument.ask(':SOUR:VOLT:RANG?').rstrip()
+        return self._visainstrument.query(':SOUR:VOLT:RANG?').rstrip()
 
     def do_set_source_voltage_range(self, voltage_range):
         '''
@@ -546,7 +547,7 @@ class Keithley_2400(Instrument):
             logging.warning('Can not change the voltage range because the source voltage is larger than the voltage range.')
             raise Warning('Source voltage is larger than the given voltage range. Change the source voltage first.')
         self._visainstrument.write(':SOUR:VOLT:RANG %f' %voltage_range)
-        self.get_source_voltage_range() # Ask for the range that the source meter chose.
+        self.get_source_voltage_range() # Query the range that the source meter chose.
 
     def do_get_output_state(self):
         '''
@@ -555,7 +556,7 @@ class Keithley_2400(Instrument):
         Instrument responds with 1 or 0
         Function returns True or False
         '''
-        status = self._visainstrument.ask('OUTP:STAT?').rstrip()
+        status = self._visainstrument.query('OUTP:STAT?').rstrip()
         logging.debug('Get output status: ' + status)
         return bool(int(status))
 
@@ -588,7 +589,7 @@ class Keithley_2400(Instrument):
             3 :	'resistance',
             4 :	'timestamp',
             5 :	'statusword'}
-        data = self._visainstrument.ask(':READ?').split(',')
+        data = self._visainstrument.query(':READ?').split(',')
         logging.debug(__name__ + ' : Read output values from instrument')
         if type(value) == int:
             if data[value-1][-4:] == 'E+37':
@@ -616,7 +617,7 @@ class Keithley_2400(Instrument):
         '''
         logging.debug('Getting the current reading of %s.' % self.get_name())
         if self.get_output_state():
-            return self._visainstrument.ask(':READ?').split(',')[1]
+            return self._visainstrument.query(':READ?').split(',')[1]
         else:
             logging.warning('Trying to read current of %s while the output is off.' % self.get_name())
 #            raise Warning('Trying to read current of %s while its output is off.' % self.get_name())
