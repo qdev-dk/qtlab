@@ -32,14 +32,14 @@ _drivers = (
 def set_visa(name):
     if name not in _drivers:
         raise ValueError('Unknown VISA provider: %s', name)
-
     try:
         if name == "pyvisa":
-            from pyvisa import visa as module
+            import pyvisa as visa
         else:
             module = __import__(name)
-        global instrument
-        instrument = module.instrument
+
+            global instrument
+            instrument = module.instrument
     except:
         logging.warning('Unable to load visa driver %s', name)
 

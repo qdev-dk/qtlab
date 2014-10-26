@@ -49,12 +49,16 @@ class Keithley_2400(Instrument):
         Instrument.__init__(self, name, tags=['physical'])
 
         # Add some global constants and set up visa instrument
+        self._visarm = visa.ResourceManager()
         self._address = address
-        self._visainstrument = visa.instrument(self._address)
+        self._visainstrument = self._visarm.open_resource(self._address)
         self._visainstrument.clear()
-        self._visainstrument.delay = 20e-3
-        self._visainstrument.timeout = 1
-        
+        self._visainstrument.query_delay = 20e-3
+        self._visainstrument.ask_delay = 20e-3
+        self._visainstrument.read_termination = ''
+        self._visainstrument.write_termination = ''
+        self._visainstrument.timeout = 2
+
 #        self._voltage_step = 50e-3
 #        self._voltage_step_time = 100e-3
 
@@ -123,7 +127,7 @@ class Keithley_2400(Instrument):
                 self.reset()
             else:
                 self.reset()
-        
+
         self.get_all()
 
 # --------------------------------------
@@ -133,14 +137,14 @@ class Keithley_2400(Instrument):
         self.get_source_voltage()
         self.get_source_voltage_range()
         self.get_current_compliance()
-        self.get_voltage_compliance()        
+        self.get_voltage_compliance()
         self.get_output_state()
         self.get_terminals()
         self.get_source_function()
         self.get_voltage_source_mode()
         self.get_current_source_mode()
-        
-    
+
+
     def reset(self):
         '''
         Resets instrument to default setting for GPIB operation, i.e. manual trigger mode
@@ -165,7 +169,7 @@ class Keithley_2400(Instrument):
 #        '''
 #        self._voltage_step = voltage_step
 #        self._voltage_step_time = voltage_step_time
-        
+
 #    def set_voltage(self, voltage):
 #        '''
 #        Ramps voltage to desired value
@@ -177,7 +181,7 @@ class Keithley_2400(Instrument):
 #            Actual voltage after ramp is performed
 #        '''
 #        start_voltage = self.get_value(1)
-#        
+#
 #        step = self._voltage_step * cmp(voltage, start_voltage)
 #        step_time = self._voltage_step_time
 #        voltage_ramp = []
@@ -187,7 +191,7 @@ class Keithley_2400(Instrument):
 #            voltage_ramp.append(voltage)
 #        else:
 #            voltage_ramp = [start_voltage, voltage]
-#        
+#
 #        self.set_source_mode(1, 1)
 #        for v in voltage_ramp:
 #            self.set_source_amplitude(1, v)
@@ -198,7 +202,7 @@ class Keithley_2400(Instrument):
 #    def set_terminals(self, terminal):
 #        '''
 #        Set terminals to be used
-#        
+#
 #        Input:
 #            1: Use front terminals
 #            2: Rear terminals
@@ -221,12 +225,12 @@ class Keithley_2400(Instrument):
             'REAR'
         '''
         logging.debug('Getting the terminal used by %s.' %self.get_name())
-        reply = self._visainstrument.ask(':ROUT:TERM?')
+        reply = self._visainstrument.ask(':ROUT:TERM?').rstrip()
         if reply == 'FRON': # The source meter responds with 'FRON'
-            logging.info('The terminal used by %s is FRONT.' %(self.get_name())) 
+            logging.info('The terminal used by %s is FRONT.' %(self.get_name()))
             return 'FRONT'
         elif reply == 'REAR':
-            logging.info('The terminal used by %s is %s.' %(self.get_name(),reply)) 
+            logging.info('The terminal used by %s is %s.' %(self.get_name(),reply))
             return reply
         else:
             logging.warning('Received unexpected response from %s.' %self.get_name())
@@ -235,7 +239,7 @@ class Keithley_2400(Instrument):
     def do_set_terminals(self, terminal):
         '''
         Set terminals to be used
-        
+
         Input:
             'FRONT'
             'REAR'
@@ -274,7 +278,7 @@ class Keithley_2400(Instrument):
             'memory'
         '''
         logging.debug('Getting source function mode.')
-        reply = self._visainstrument.ask(':SOUR:FUNC:MODE?')
+        reply = self._visainstrument.ask(':SOUR:FUNC:MODE?').rstrip()
         if reply == 'VOLT':
             logging.info('Source function of %s is voltage.' % self.get_name())
             return 'voltage'
@@ -301,7 +305,7 @@ class Keithley_2400(Instrument):
         '''
         logging.debug('Setting source function mode to %s.' %function)
         self._visainstrument.write(':SOUR:FUNC:MODE %s' %function)
-    
+
 #    def set_source_mode(self, function, mode):
 #        '''
 #        Set sourcing mode
@@ -335,7 +339,7 @@ class Keithley_2400(Instrument):
             'sweep'
         '''
         logging.debug('Getting voltage sourcing mode.')
-        reply = self._visainstrument.ask('SOUR:VOLT:MODE?')
+        reply = self._visainstrument.ask('SOUR:VOLT:MODE?').rstrip()
         if reply == 'FIX':
             logging.info('Voltage sourcing mode of %s is fixed.' % self.get_name())
             return 'fixed'
@@ -375,7 +379,7 @@ class Keithley_2400(Instrument):
             'sweep'
         '''
         logging.debug('Getting current sourcing mode.')
-        reply = self._visainstrument.ask('SOUR:CURR:MODE?')
+        reply = self._visainstrument.ask('SOUR:CURR:MODE?').rstrip()
         if reply == 'FIX':
             logging.info('Current sourcing mode of %s is fixed.' % self.get_name())
             return 'fixed'
@@ -423,7 +427,7 @@ class Keithley_2400(Instrument):
     def set_source_amplitude(self, function, amplitude):
         '''
         Set source amplitude in volts or amps
-        
+
         Input:
             1           : voltage mode
             2           : current mode
@@ -487,7 +491,7 @@ class Keithley_2400(Instrument):
         Get current compliance in amps
         '''
         logging.debug('Get current compliance.')
-        return self._visainstrument.ask(':SENS:CURR:PROT:LEV?')
+        return self._visainstrument.ask(':SENS:CURR:PROT:LEV?').rstrip()
 
     def do_set_voltage_compliance(self, compliance):
         '''
@@ -506,7 +510,7 @@ class Keithley_2400(Instrument):
         Get voltage compliance in volts
         '''
         logging.debug('Get voltage compliance.')
-        return self._visainstrument.ask(':SENS:VOLT:PROT:LEV?')
+        return self._visainstrument.ask(':SENS:VOLT:PROT:LEV?').rstrip()
 
     def do_get_source_voltage(self):
         '''
@@ -531,7 +535,7 @@ class Keithley_2400(Instrument):
         Get the voltage range for the voltage source mode.
         '''
         logging.debug('Getting the source voltage range of %s.' % self.get_name())
-        return self._visainstrument.ask(':SOUR:VOLT:RANG?')
+        return self._visainstrument.ask(':SOUR:VOLT:RANG?').rstrip()
 
     def do_set_source_voltage_range(self, voltage_range):
         '''
@@ -543,7 +547,7 @@ class Keithley_2400(Instrument):
             raise Warning('Source voltage is larger than the given voltage range. Change the source voltage first.')
         self._visainstrument.write(':SOUR:VOLT:RANG %f' %voltage_range)
         self.get_source_voltage_range() # Ask for the range that the source meter chose.
-        
+
     def do_get_output_state(self):
         '''
         Get output status
@@ -551,7 +555,7 @@ class Keithley_2400(Instrument):
         Instrument responds with 1 or 0
         Function returns True or False
         '''
-        status = self._visainstrument.ask('OUTP:STAT?')
+        status = self._visainstrument.ask('OUTP:STAT?').rstrip()
         logging.debug('Get output status: ' + status)
         return bool(int(status))
 
@@ -571,7 +575,7 @@ class Keithley_2400(Instrument):
     def get_value(self, value):
         '''
         Measure one or more of the following from the  from buffer
-        
+
         Input:
             None
 
@@ -615,7 +619,7 @@ class Keithley_2400(Instrument):
             return self._visainstrument.ask(':READ?').split(',')[1]
         else:
             logging.warning('Trying to read current of %s while the output is off.' % self.get_name())
-#            raise Warning('Trying to read current of %s while its output is off.' % self.get_name()) 
+#            raise Warning('Trying to read current of %s while its output is off.' % self.get_name())
             return False
 
     def beep(self, freq=500, length=1):
