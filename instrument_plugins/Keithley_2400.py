@@ -3,6 +3,7 @@
 # Gabriele de Boo <g.deboo@student.unsw.edu.au>
 #
 # Merlin von Soosten <merlin@nbi.dk> changed to pyvisa==1.6 driver
+#       (http://pyvisa.readthedocs.org/en/1.6/migrating.html)
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
