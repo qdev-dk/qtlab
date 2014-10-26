@@ -13,5 +13,5 @@ data
 tmp
 3rd_party
 
-init\80_create_instruments.py
+*_create_instruments.py
 userconfig.py
