@@ -145,10 +145,10 @@ class DataStorageGenerator:
     Date (YYYYMMDD) -> Time and ID (HHMMSS_#ID_name) -> data (HHMMSS_#ID_name)
 
     With datesubdir = true, and timesubdir = false, and incremental = true
-    Date (YYYYMMDD) -> ID (#ID_name) -> data (HHMMSS_#ID_name) 
+    Date (YYYYMMDD) -> ID (#ID_name) -> data (HHMMSS_#ID_name)
 
     With datesubdir = true, and timesubdir = true, and incremental = false
-    Date (YYYYMMDD) -> Time (HHMMSS_name) -> data (HHMMSS_name) 
+    Date (YYYYMMDD) -> Time (HHMMSS_name) -> data (HHMMSS_name)
 
     With datesubdir = false
     ID (#ID_name)  -> data
@@ -194,8 +194,8 @@ class DataStorageGenerator:
         # Set date sub-directory if given
         if self._datesubdir:
             path = os.path.join(path, time.strftime('%Y%m%d', ts))
-            
-            # Set time sub-directory if given    
+
+            # Set time sub-directory if given
             if self._timesubdir:
                 tsd = time.strftime('%H%M%S', ts)
 
@@ -221,13 +221,13 @@ class DataStorageGenerator:
 
                 # Create final path
                 path = os.path.join(path, tsd)
-                
-                
+
+
         else:
             # Create final path
             path = os.path.join(path, '#'+str(idNum))
 
-        
+
 
         # Retun final path
         return path
