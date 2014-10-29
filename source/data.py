@@ -38,7 +38,8 @@ in_qtlab = config.get('qtlab', False)
 from lib.network.object_sharer import SharedGObject, cache_result
 
 if in_qtlab:
-    import qt
+    from qtflow import get_flowcontrol
+    from instruments import get_instruments
 
 # Filename generator classes
 
@@ -499,6 +500,9 @@ class Data(SharedGObject):
         if not self._tempfile:
             Data._data_list.add(name, self)
 
+        self.flow = get_flowcontrol()
+        self.instruments - get_instruments()
+
     def __repr__(self):
         ret = "Data '%s', filename '%s'" % (self._name, self._filename)
         return ret
@@ -812,7 +816,7 @@ class Data(SharedGObject):
         try:
             if in_qtlab:
                 self._stop_req_hid = \
-                    qt.flow.connect('stop-request', self._stop_request_cb)
+                    self.flow.connect('stop-request', self._stop_request_cb)
         except:
             pass
 
@@ -833,7 +837,7 @@ class Data(SharedGObject):
             self._file = None
 
         if self._stop_req_hid is not None and in_qtlab:
-            qt.flow.disconnect(self._stop_req_hid)
+            self.flow.disconnect(self._stop_req_hid)
             self._stop_req_hid = None
 
     def _open_log_file(self, log_level=logging.INFO):
@@ -855,7 +859,7 @@ class Data(SharedGObject):
         f.write('Filename: %s\n' % self._filename)
         f.write('Timestamp: %s\n\n' % self._timestamp)
 
-        inslist = dict_to_ordered_tuples(qt.instruments.get_instruments())
+        inslist = dict_to_ordered_tuples(self.instruments.get_instruments())
         for (iname, ins) in inslist:
             f.write('Instrument: %s\n' % iname)
             parlist = dict_to_ordered_tuples(ins.get_parameters())
