@@ -3,15 +3,10 @@
 import os
 import sys
 from qtflow import get_flowcontrol
-from instruments import get_instruments
 from lib import config as _config
 from scripts import Scripts, Script
 
 config = _config.get_config()
-# We cannot import Data here, Data import qt, this is a circular import!
-# from data import Data
-# data = Data.get_named_list()
-instruments = get_instruments()
 frontpanels = {}
 sliders = {}
 scripts = Scripts()

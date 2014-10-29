@@ -55,12 +55,15 @@ else:
     logging.info('psyco acceleration not enabled')
 
 import qt
+from instruments import get_instruments
+
 # This is a circular import as Data needs to import qt to get access to qt.flow and qt.instrument
 # from qt import Data
 from data import Data
 # Adding these variables to not break stuff.
 qt.Data = Data
 qt.data = Data.get_named_list()
+qt.instruments = get_instruments()
 
 import plot
 
