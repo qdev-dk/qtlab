@@ -732,7 +732,7 @@ def plot(*args, **kwargs):
     plotname = kwargs.pop('name', 'plot')
     ret = kwargs.pop('ret', True)
     graph = Plot._plot_list[plotname]
-    if graph is None:
+    if graph is None or plotname == 'plot':
         graph = Plot2D(name=plotname)
 
     set_global_plot_options(graph, kwargs)

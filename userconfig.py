@@ -71,7 +71,8 @@ config['ipython_logfile'] = ''      #e.g. 'command.log'
 # By defult the data is stored in the "datadir" folder in a subfolder with
 # date of the measurement, and herein a subfolder with timestamp and name
 # To set an auto-increment filename generator use the following:
-import data, qt
+import qt
+import data
 gen = data.DataStorageGenerator(config['datadir'],datesubdir=True, timesubdir=True, incremental=True)
 qt.Data.set_filename_generator(gen)
 # For more data name generators, check out data.py
