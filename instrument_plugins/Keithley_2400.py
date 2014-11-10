@@ -60,7 +60,7 @@ class Keithley_2400(Instrument):
         self.add_parameter('source_voltage',
             type=types.FloatType,
             tags=['sweep'],
-            maxstep=0.100, stepdelay=100,
+            maxstep=0.5, stepdelay=10,
             flags=Instrument.FLAG_GETSET, minval=-210, maxval=210, units='V')
         self.add_parameter('source_voltage_range',
             type=types.FloatType,
@@ -133,7 +133,7 @@ class Keithley_2400(Instrument):
         Simplifies Queries and strips trailing spaces/newline characters, since
         they are not remove in pyvisa >= 1.6
         '''
-        return self._visainstrument.query(query, **kwargs).rstrip()
+        return self._visainstrument.query(query, delay=0.01, **kwargs).rstrip()
 
     def _write(self, write, **kwargs):
         return self._visainstrument.write(write, **kwargs)
